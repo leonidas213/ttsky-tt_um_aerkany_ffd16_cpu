@@ -5,7 +5,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, Timer, ClockCycles
 from common import TTPins
-from spimemory import SpiMemoryDevice, SpiFlash, SpiRam
+from spimemory import SpiMemoryDevice, SpiFlash, SpiRam, QspiFlash
 
 
 async def reset_dut(dut):
@@ -24,7 +24,7 @@ async def boot_cpu(dut):
 
     cocotb.start_soon(Clock(dut.clk, 40, unit="ns").start())
     pins = TTPins(dut)
-    flash = SpiFlash(dut, pins, verbose=True, log_bytes=True)
+    flash = QspiFlash(dut, pins, verbose=True, log_bytes=True)
     ram = SpiRam(dut, pins)
     return pins, flash, ram
 

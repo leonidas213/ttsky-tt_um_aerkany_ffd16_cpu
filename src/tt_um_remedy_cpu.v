@@ -205,6 +205,8 @@ module programCounter
     input  wire        absJmp,
     input  wire        intr,
     input  wire        reti,
+    input  wire [15:0] deb_jump_addr,
+    input  wire        deb_jump,
     input  wire        relJmp,
     output wire [15:0] PC
   );
@@ -250,264 +252,17 @@ module programCounter
         PCr     <= PCr + 16'd1;
       end
     end
-  end
-
-endmodule
-
-module spi_memory_interface (
-    input  wire        clk,           // System clock
-    input  wire        spi_rst_n,       // Reset
-    input  wire        st,            // Store (write) signal
-    input  wire        ld,            // Load (read) signal
-    input  wire [15:0] addr,          // 16-bit memory address
-    input  wire [15:0] data_in,       // 16-bit data input (for write)
-    output reg  [15:0] data_out,      // 16-bit data output (for read)
-    output reg         spi_cs,        // SPI Chip Select (Active Low)
-    output reg         spi_clk,       // SPI Clock
-    output reg         busy,          // Busy signal
-    output reg         spi_mosi,      // SPI MOSI (Master Out Slave In)
-    input  wire        spi_miso      // SPI MISO (Master In Slave Out)
-
-  );
-
-  // Define FSM states
-
-  localparam  IDLE = 4'b0000;
-  localparam  START = 4'b0001;
-  localparam  SEND_CMD = 4'b0010;
-  localparam  SEND_ADDR = 4'b0011;
-  localparam  WRITE_DATA = 4'b0100;
-  localparam  READ_DATA = 4'b0101;
-  localparam  STOP = 4'b0110;
-  localparam  TOGGLECLKON = 4'b0111;
-  localparam  decideFate = 4'b1000;
-
-  localparam  STcom = 1;
-  localparam  LDcom = 0;
-
-
-  reg[4:0] state;
-  reg[4:0] last_state;
-  reg command;
-
-  reg [7:0] shift_reg; // Shift register for SPI data
-  reg [5:0] bit_cnt;   // Bit counter
-  reg [2:0] byte_cnt;  // Byte counter
-  reg [15:0] recv_data;// Temporary storage for received data
-
-  reg [0:0] prev_command;
-  reg [15:0] prev_addr;
-  wire [23:0] spi_addr;
-  assign spi_addr = {7'b0000000, addr, 1'b0};
-
-  always @(posedge clk , negedge spi_rst_n)
-  begin
-
-    if (!spi_rst_n)
+    else if(deb_jump)
     begin
-      state   <= IDLE;
-      spi_cs  <= 1'b1;
-      spi_clk <= 1'b0;
-      spi_mosi <= 1'b0;
-      busy    <= 1'b0;
-      bit_cnt <= 3'b000;
-      byte_cnt <= 3'b000;
-      command <= STcom;
-      state <= IDLE;
-      last_state <= IDLE;
+      PCr <= deb_jump_addr;
     end
-    else
-    begin
-      case (state)
-        IDLE:
-        begin
-          busy <= 1'b0;
-          if (st || ld)
-          begin
-            state <= START;
-            busy <= 1'b1;
-
-            prev_command <= command;
-            prev_addr <= addr;
-
-            if (st)
-            begin
-              shift_reg <= 8'h02; // Write command
-              command <= STcom;
-            end
-
-            else if (ld)
-            begin
-              shift_reg <= 8'h03; // Read command
-              command <= LDcom;
-            end
-
-          end
-        end
-
-        START:
-        begin
-          spi_cs <=1'b0;
-          bit_cnt <= 3'b000;
-          byte_cnt <= 3'b000;
-          state <= SEND_CMD;
-        end
-
-        SEND_CMD:
-        begin
-          spi_clk <= 0;
-          if (bit_cnt < 8)
-          begin
-            spi_mosi <= shift_reg[7];   // Send MSB first
-            shift_reg <= shift_reg << 1;
-            last_state <= state;
-            state <= TOGGLECLKON;
-            bit_cnt <= bit_cnt + 1;
-          end
-          else
-          begin
-            state <= SEND_ADDR;
-            shift_reg <= spi_addr[23:16] ;         // top address byte for 24-bit SPI flash
-            bit_cnt <= 0;
-            byte_cnt <= 0;
-          end
-        end
-
-        SEND_ADDR:
-        begin
-          spi_clk <= 0;
-
-          if (bit_cnt < 8)
-          begin
-            spi_mosi <= shift_reg[7];
-            shift_reg <= shift_reg << 1;
-            last_state <= state;
-            state <= TOGGLECLKON;
-            bit_cnt <= bit_cnt + 1;
-          end
-          else if (byte_cnt == 0)
-          begin
-            shift_reg <= spi_addr[15:8];    // middle address byte
-            byte_cnt <= 1;
-            bit_cnt <= 0;
-          end
-          else if (byte_cnt == 1)
-          begin
-            shift_reg <= spi_addr[7:0];     // low address byte
-            byte_cnt <= 2;
-            bit_cnt <= 0;
-          end
-          else
-          begin
-            state <= command ? WRITE_DATA : READ_DATA;
-            shift_reg <= command ? data_in[15:8] : 8'h00;
-            recv_data <= 16'h0000;
-            bit_cnt <= 0;
-            byte_cnt <= 0;
-            spi_mosi <= 1'b0;
-          end
-        end
-
-        WRITE_DATA:
-        begin
-
-          spi_clk <= 0;
-          if (bit_cnt < 8)
-          begin
-            spi_mosi <= shift_reg[7];
-            shift_reg <= shift_reg << 1;
-
-            last_state <= state;
-            state <= TOGGLECLKON;
-            bit_cnt <= bit_cnt + 1;
-          end
-          else if (byte_cnt == 0)
-          begin
-            shift_reg <= data_in[7:0]; // Load low byte
-            byte_cnt <= 1;
-            bit_cnt <= 0;
-          end
-          else
-          begin
-            state <= decideFate; // Decide next state based on command
-          end
-        end
-
-        READ_DATA:
-        begin
-
-          spi_clk <= 0;
-          if (bit_cnt < 17)
-          begin
-            last_state<=state;
-
-            if (bit_cnt<16)
-              state <= TOGGLECLKON;
-            bit_cnt <= bit_cnt + 1;
-            recv_data[15:0] <= {recv_data[14:0], spi_miso}; // Shift left
-
-
-          end
-          else
-          begin
-            recv_data[15:0] <= {recv_data[14:0], spi_miso};
-            data_out <= recv_data;
-            state <= decideFate; // Decide next state based on command
-            bit_cnt <= 0;
-          end
-        end
-
-
-        STOP:
-        begin
-
-          spi_clk <= 0;
-          spi_cs <= 1'b1;
-          busy <= 1'b0;
-          state <= IDLE;
-        end
-
-        TOGGLECLKON:
-        begin
-          spi_clk <= 1;
-          state <= last_state;
-        end
-
-        decideFate:
-        begin
-          if (command == prev_command &&
-              addr == prev_addr + 1 )
-          begin
-            // Continue without releasing CS
-            shift_reg <= command ? data_in[15:8] : 8'h00;
-            bit_cnt <= 0;
-            byte_cnt <= 0;
-            recv_data <= 0;
-            spi_mosi <= 0;
-            state <= command ? WRITE_DATA : READ_DATA;
-
-            // Update previous address
-            prev_addr <= addr;
-          end
-          else
-          begin
-            // End transaction
-            state <= STOP;
-          end
-        end
-        default :
-          state <= STOP;
-
-      endcase
-    end
-
   end
 
 endmodule
 
 module interrupt_controller_small (
     input  [3:0] dOut,
-    input  [15:0] Addr,
+    input  [4:0] Addr,
     input         ioW,
     input         C,
     input         rst_n,
@@ -517,9 +272,9 @@ module interrupt_controller_small (
     input         reti,
     input         pc_en,
 
-    input  [15:0] CPUInterruptEnableAddr,
-    input  [15:0] inputInterruptAddr,
-    input  [15:0] interruptRegAddr,
+    input  [4:0] CPUInterruptEnableAddr,
+    input  [4:0] inputInterruptAddr,
+    input  [4:0] interruptRegAddr,
 
     output [15:0] InterruptOut,
     output        intr,
@@ -602,12 +357,12 @@ module interrupt_controller_small (
 
 endmodule
 module lfsr_RandomNumberGen (
-    input  [15:0] adrrIn,
+    input  [4:0] adrrIn,
     input  [7:0] dataIn,
     input         ioW,
     input         clk,
-    input  [15:0] SeedAdr,
-    input  [15:0] RngAdr,
+    input  [4:0] SeedAdr,
+    input  [4:0] RngAdr,
     output [15:0] Out
 );
 
@@ -638,15 +393,15 @@ module lfsr_RandomNumberGen (
 endmodule
 module timer (
     input  [15:0] dOut,
-    input  [15:0] Addr,
+    input  [4:0] Addr,
     input         ioW,
     input         C,
     input         InterLock,
-    input  [15:0] timerConfigAddr,
-    input  [15:0] timerTargetAddr,
-    input  [15:0] timerResetAddr,
-    input  [15:0] timerReadAddr,
-    input  [15:0] timerSyncStartAddr,
+    input  [4:0] timerConfigAddr,
+    input  [4:0] timerTargetAddr,
+    input  [4:0] timerResetAddr,
+    input  [4:0] timerReadAddr,
+    input  [4:0] timerSyncStartAddr,
     input         rst_n,
     output [15:0] TimerOut,
     output        timer_interrupt
@@ -764,15 +519,15 @@ endmodule
 
 module timer_tiny (
     input  [8:0] dOut,
-    input  [15:0] Addr,
+    input  [4:0] Addr,
     input         ioW,
     input         C,
     input         InterLock,
-    input  [15:0] timerConfigAddr,
-    input  [15:0] timerTargetAddr,
-    input  [15:0] timerResetAddr,
-    input  [15:0] timerReadAddr,
-    input  [15:0] timerSyncStartAddr,
+    input  [4:0] timerConfigAddr,
+    input  [4:0] timerTargetAddr,
+    input  [4:0] timerResetAddr,
+    input  [4:0] timerReadAddr,
+    input  [4:0] timerSyncStartAddr,
     input         rst_n,
     output [15:0] TimerOut,
     output        timer_interrupt
@@ -959,134 +714,98 @@ module i2c_master_ctrl (
     output reg [15:0]  cpu_dout,
 
     input              sda_in,
-    input              scl_in,
     output             sda_out,
-    output             scl_out,
+    output reg         scl_out,
+    output             scl_oe,
     output reg         sda_oe,
-    output reg         scl_oe,
 
     output             interrupt
   );
 
-  assign sda_out = 1'b0;
-  assign scl_out = 1'b0;
-  assign interrupt = irq_enable & irq_pending;
+  // Minimal fixed-speed I2C master.
+  // I2C SCL is roughly: clk / (3 * (I2C_DIV + 1))
+  // Example: 25 MHz clock, I2C_DIV=20 gives about 397 kHz.
+  localparam [7:0] I2C_DIV = 8'd20;
 
-  // scl_in is kept only for interface compatibility. Clock stretching support is removed.
-  wire _unused_scl_in;
-  assign _unused_scl_in = scl_in;
+  assign sda_out   = 1'b0;          // open-drain style: only drive low
+  assign scl_oe    = enable | busy | bus_active;
+  assign interrupt = irq_enable & done;
 
-  localparam ST_IDLE       = 4'd0;
-  localparam ST_START_1    = 4'd1;
-  localparam ST_START_2    = 4'd2;
-  localparam ST_START_3    = 4'd3;
-  localparam ST_BIT_SETUP  = 4'd4;
-  localparam ST_BIT_HIGH   = 4'd5;
-  localparam ST_BIT_LOW    = 4'd6;
-  localparam ST_ACK_SETUPW = 4'd7;
-  localparam ST_ACK_HIGHW  = 4'd8;
-  localparam ST_ACK_LOWW   = 4'd9;
-  localparam ST_ACK_SETUPR = 4'd10;
-  localparam ST_ACK_HIGHR  = 4'd11;
-  localparam ST_ACK_LOWR   = 4'd12;
-  localparam ST_STOP_1     = 4'd13;
-  localparam ST_STOP_2     = 4'd14;
-  localparam ST_STOP_3     = 4'd15;
+  localparam ST_IDLE  = 3'd0;
+  localparam ST_START = 3'd1;
+  localparam ST_BIT   = 3'd2;
+  localparam ST_ACK   = 3'd3;
+  localparam ST_STOP  = 3'd4;
 
   reg        enable;
   reg        irq_enable;
 
-  reg        op_busy;
+  reg        busy;
   reg        bus_active;
   reg        done;
   reg        ack_error;
   reg        rx_valid;
-  reg        irq_pending;
 
-  reg [15:0] prescale_reg;
-  reg [15:0] divcnt;
-  reg        sm_tick;
+  reg [7:0]  divcnt;
+  reg [7:0]  tx_data;
+  reg [7:0]  rx_data;
+  reg [7:0]  shift;
+  reg [2:0]  bit_count;
 
-  reg [7:0]  tx_data_reg;
-  reg [7:0]  rx_data_reg;
+  reg        do_read;
+  reg        do_byte;
+  reg        do_stop;
+  reg        do_nack;
 
-  reg [7:0]  tx_shift;
-  reg [7:0]  rx_shift;
-  reg [3:0]  bit_count;
+  reg [2:0]  state;
+  reg [1:0]  phase;
 
-  reg        cmd_start;
-  reg        cmd_stop;
-  reg        cmd_write;
-  reg        cmd_read;
-  reg        cmd_read_nack;
+  wire tick = (divcnt == 8'd0);
 
-  reg [3:0]  state;
-
-  wire launch_cmd;
-  assign launch_cmd = wr_en && (reg_addr == 4'h4) && !op_busy && enable &&
-         (cpu_din[0] || cpu_din[1] || cpu_din[2] || cpu_din[3]);
+  wire cmd_hit   = wr_en && (reg_addr == 4'h4) && enable && !busy;
+  wire cmd_any   = cpu_din[0] | cpu_din[1] | cpu_din[2] | cpu_din[3];
+  wire cmd_start = cpu_din[0];
+  wire cmd_stop  = cpu_din[1];
+  wire cmd_write = cpu_din[2];
+  wire cmd_read  = cpu_din[3];
 
   always @(posedge clk or negedge rst_n)
   begin
     if (!rst_n)
     begin
-      enable         <= 1'b0;
-      irq_enable     <= 1'b0;
-
-      op_busy        <= 1'b0;
-      bus_active     <= 1'b0;
-      done           <= 1'b0;
-      ack_error      <= 1'b0;
-      rx_valid       <= 1'b0;
-      irq_pending    <= 1'b0;
-
-      prescale_reg   <= 16'd0;
-      divcnt         <= 16'd0;
-      sm_tick        <= 1'b0;
-
-      tx_data_reg    <= 8'd0;
-      rx_data_reg    <= 8'd0;
-      tx_shift       <= 8'd0;
-      rx_shift       <= 8'd0;
-      bit_count      <= 4'd0;
-
-      cmd_start      <= 1'b0;
-      cmd_stop       <= 1'b0;
-      cmd_write      <= 1'b0;
-      cmd_read       <= 1'b0;
-      cmd_read_nack  <= 1'b0;
-
-      state          <= ST_IDLE;
-
-      sda_oe         <= 1'b0;
-      scl_oe         <= 1'b0;
+      enable     <= 1'b0;
+      irq_enable <= 1'b0;
+      busy       <= 1'b0;
+      bus_active <= 1'b0;
+      done       <= 1'b0;
+      ack_error  <= 1'b0;
+      rx_valid   <= 1'b0;
+      divcnt     <= 8'd0;
+      tx_data    <= 8'd0;
+      rx_data    <= 8'd0;
+      shift      <= 8'd0;
+      bit_count  <= 3'd0;
+      do_read    <= 1'b0;
+      do_byte    <= 1'b0;
+      do_stop    <= 1'b0;
+      do_nack    <= 1'b0;
+      state      <= ST_IDLE;
+      phase      <= 2'd0;
+      scl_out    <= 1'b1;
+      sda_oe     <= 1'b0;
     end
     else
     begin
-      sm_tick <= 1'b0;
-
-      if (op_busy)
+      if (busy)
       begin
-        if (prescale_reg == 16'd0)
-        begin
-          sm_tick <= 1'b1;
-        end
+        if (tick)
+          divcnt <= I2C_DIV;
         else
-        begin
-          if (divcnt == 16'd0)
-          begin
-            divcnt  <= prescale_reg;
-            sm_tick <= 1'b1;
-          end
-          else
-          begin
-            divcnt <= divcnt - 16'd1;
-          end
-        end
+          divcnt <= divcnt - 8'd1;
       end
       else
       begin
-        divcnt <= 16'd0;
+        divcnt <= 8'd0;
       end
 
       if (wr_en)
@@ -1098,279 +817,222 @@ module i2c_master_ctrl (
             irq_enable <= cpu_din[1];
           end
 
+          // Write 1 to clear sticky status bits.
           4'h1:
           begin
-            if (cpu_din[2])
-              done        <= 1'b0;
-            if (cpu_din[3])
-              ack_error   <= 1'b0;
-            if (cpu_din[4])
-              rx_valid    <= 1'b0;
-            if (cpu_din[5])
-              irq_pending <= 1'b0;
-          end
-
-          4'h2:
-          begin
-            prescale_reg <= cpu_din;
+            if (cpu_din[2]) done      <= 1'b0;
+            if (cpu_din[3]) ack_error <= 1'b0;
+            if (cpu_din[4]) rx_valid  <= 1'b0;
           end
 
           4'h3:
           begin
-            tx_data_reg <= cpu_din[7:0];
+            tx_data <= cpu_din[7:0];
           end
-          default:
-          begin
-          end
-
         endcase
       end
 
-      if (launch_cmd)
+      if (cmd_hit && cmd_any)
       begin
-        cmd_start     <= cpu_din[0];
-        cmd_stop      <= cpu_din[1];
-        cmd_write     <= cpu_din[2];
-        cmd_read      <= cpu_din[3];
-        cmd_read_nack <= cpu_din[4];
+        busy       <= 1'b1;
+        done       <= 1'b0;
+        ack_error  <= 1'b0;
+        rx_valid   <= 1'b0;
+        divcnt     <= 8'd0;
+        phase      <= 2'd0;
+        bit_count  <= 3'd7;
+        do_read    <= cmd_read;
+        do_byte    <= cmd_write | cmd_read;
+        do_stop    <= cmd_stop;
+        do_nack    <= cpu_din[4];
+        shift      <= cmd_read ? 8'd0 : tx_data;
 
-        done        <= 1'b0;
-        ack_error   <= 1'b0;
-        irq_pending <= 1'b0;
-
-        tx_shift    <= tx_data_reg;
-        rx_shift    <= 8'd0;
-        bit_count   <= 4'd7;
-        op_busy     <= 1'b1;
-
-        if (cpu_din[0])
+        if (cmd_start)
         begin
-          state  <= ST_START_1;
-          sda_oe <= 1'b0;
-          scl_oe <= 1'b0;
+          state   <= ST_START;
+          scl_out <= 1'b1;
+          sda_oe  <= 1'b0;
         end
-        else if (cpu_din[2] || cpu_din[3])
+        else if (cmd_write || cmd_read)
         begin
-          state  <= ST_BIT_SETUP;
-          scl_oe <= 1'b1;
-        end
-        else if (cpu_din[1])
-        begin
-          state  <= ST_STOP_1;
-          sda_oe <= 1'b1;
-          scl_oe <= 1'b1;
+          state   <= ST_BIT;
+          scl_out <= 1'b0;
+          sda_oe  <= cmd_read ? 1'b0 : ~tx_data[7];
         end
         else
         begin
-          op_busy     <= 1'b0;
-          done        <= 1'b1;
-          irq_pending <= 1'b1;
-          state       <= ST_IDLE;
+          state   <= ST_STOP;
+          scl_out <= 1'b0;
+          sda_oe  <= 1'b1;
         end
       end
-
-      if (sm_tick && op_busy)
+      else if (busy && tick)
       begin
         case (state)
-          ST_IDLE:
+          ST_START:
           begin
-            op_busy <= 1'b0;
+            case (phase)
+              2'd0:
+              begin
+                scl_out <= 1'b1;
+                sda_oe  <= 1'b0;
+                phase   <= 2'd1;
+              end
+
+              2'd1:
+              begin
+                scl_out <= 1'b1;
+                sda_oe  <= 1'b1;      // SDA falling while SCL high
+                phase   <= 2'd2;
+              end
+
+              default:
+              begin
+                scl_out    <= 1'b0;
+                bus_active <= 1'b1;
+                phase      <= 2'd0;
+
+                if (do_byte)
+                begin
+                  state  <= ST_BIT;
+                  sda_oe <= do_read ? 1'b0 : ~tx_data[7];
+                end
+                else if (do_stop)
+                begin
+                  state  <= ST_STOP;
+                  sda_oe <= 1'b1;
+                end
+                else
+                begin
+                  busy  <= 1'b0;
+                  done  <= 1'b1;
+                  state <= ST_IDLE;
+                end
+              end
+            endcase
           end
 
-          ST_START_1:
+          ST_BIT:
           begin
-            sda_oe <= 1'b0;
-            scl_oe <= 1'b0;
-            if (sda_in)
-            begin
-              state <= ST_START_2;
-            end
+            case (phase)
+              2'd0:
+              begin
+                scl_out <= 1'b0;
+                sda_oe  <= do_read ? 1'b0 : ~shift[bit_count];
+                phase   <= 2'd1;
+              end
+
+              2'd1:
+              begin
+                scl_out <= 1'b1;
+                phase   <= 2'd2;
+              end
+
+              default:
+              begin
+                scl_out <= 1'b0;
+
+                if (do_read)
+                  shift[bit_count] <= sda_in;
+
+                if (bit_count != 3'd0)
+                begin
+                  bit_count <= bit_count - 3'd1;
+                  phase     <= 2'd0;
+                end
+                else
+                begin
+                  phase <= 2'd0;
+                  state <= ST_ACK;
+                end
+              end
+            endcase
           end
 
-          ST_START_2:
+          ST_ACK:
           begin
-            sda_oe <= 1'b1; // SDA low while SCL high
-            scl_oe <= 1'b0;
-            state  <= ST_START_3;
+            case (phase)
+              2'd0:
+              begin
+                scl_out <= 1'b0;
+                sda_oe  <= do_read ? ~do_nack : 1'b0; // read: ACK low unless NACK
+                phase   <= 2'd1;
+              end
+
+              2'd1:
+              begin
+                scl_out <= 1'b1;
+                if (!do_read && sda_in)
+                  ack_error <= 1'b1;
+                phase <= 2'd2;
+              end
+
+              default:
+              begin
+                scl_out <= 1'b0;
+                sda_oe  <= 1'b0;
+                phase   <= 2'd0;
+
+                if (do_read)
+                begin
+                  rx_data  <= shift;
+                  rx_valid <= 1'b1;
+                end
+
+                if (do_stop)
+                begin
+                  state  <= ST_STOP;
+                  sda_oe <= 1'b1;
+                end
+                else
+                begin
+                  busy  <= 1'b0;
+                  done  <= 1'b1;
+                  state <= ST_IDLE;
+                end
+              end
+            endcase
           end
 
-          ST_START_3:
+          ST_STOP:
           begin
-            scl_oe     <= 1'b1; // pull SCL low
-            bus_active <= 1'b1;
+            case (phase)
+              2'd0:
+              begin
+                scl_out <= 1'b0;
+                sda_oe  <= 1'b1;
+                phase   <= 2'd1;
+              end
 
-            if (cmd_write || cmd_read)
-            begin
-              state <= ST_BIT_SETUP;
-            end
-            else if (cmd_stop)
-            begin
-              state <= ST_STOP_1;
-            end
-            else
-            begin
-              done        <= 1'b1;
-              irq_pending <= 1'b1;
-              op_busy     <= 1'b0;
-              state       <= ST_IDLE;
-            end
-          end
+              2'd1:
+              begin
+                scl_out <= 1'b1;
+                sda_oe  <= 1'b1;
+                phase   <= 2'd2;
+              end
 
-          ST_BIT_SETUP:
-          begin
-            scl_oe <= 1'b1; // keep clock low during setup
-
-            if (cmd_write)
-            begin
-              if (tx_shift[bit_count])
-                sda_oe <= 1'b0; // release for logic 1
-              else
-                sda_oe <= 1'b1; // drive low for logic 0
-            end
-            else
-            begin
-              sda_oe <= 1'b0; // read bit: release SDA
-            end
-
-            state <= ST_BIT_HIGH;
-          end
-
-          ST_BIT_HIGH:
-          begin
-            scl_oe <= 1'b0; // release SCL high
-
-            if (cmd_read)
-              rx_shift[bit_count] <= sda_in;
-
-            state <= ST_BIT_LOW;
-          end
-
-          ST_BIT_LOW:
-          begin
-            scl_oe <= 1'b1; // drive SCL low again
-
-            if (bit_count != 4'd0)
-            begin
-              bit_count <= bit_count - 4'd1;
-              state     <= ST_BIT_SETUP;
-            end
-            else
-            begin
-              if (cmd_write)
-                state <= ST_ACK_SETUPW;
-              else
-                state <= ST_ACK_SETUPR;
-            end
-          end
-
-          ST_ACK_SETUPW:
-          begin
-            sda_oe <= 1'b0; // slave drives ACK/NACK
-            scl_oe <= 1'b1;
-            state  <= ST_ACK_HIGHW;
-          end
-
-          ST_ACK_HIGHW:
-          begin
-            scl_oe <= 1'b0;
-
-            if (sda_in)
-              ack_error <= 1'b1;
-
-            state <= ST_ACK_LOWW;
-          end
-
-          ST_ACK_LOWW:
-          begin
-            scl_oe <= 1'b1;
-            sda_oe <= 1'b0;
-
-            if (cmd_stop)
-            begin
-              state <= ST_STOP_1;
-            end
-            else
-            begin
-              done        <= 1'b1;
-              irq_pending <= 1'b1;
-              op_busy     <= 1'b0;
-              state       <= ST_IDLE;
-            end
-          end
-
-          ST_ACK_SETUPR:
-          begin
-            scl_oe <= 1'b1;
-
-            if (cmd_read_nack)
-              sda_oe <= 1'b0; // NACK = release high
-            else
-              sda_oe <= 1'b1; // ACK = drive low
-
-            state <= ST_ACK_HIGHR;
-          end
-
-          ST_ACK_HIGHR:
-          begin
-            scl_oe <= 1'b0;
-            state  <= ST_ACK_LOWR;
-          end
-
-          ST_ACK_LOWR:
-          begin
-            scl_oe      <= 1'b1;
-            sda_oe      <= 1'b0;
-            rx_data_reg <= rx_shift;
-            rx_valid    <= 1'b1;
-
-            if (cmd_stop)
-            begin
-              state <= ST_STOP_1;
-            end
-            else
-            begin
-              done        <= 1'b1;
-              irq_pending <= 1'b1;
-              op_busy     <= 1'b0;
-              state       <= ST_IDLE;
-            end
-          end
-
-          ST_STOP_1:
-          begin
-            sda_oe <= 1'b1; // SDA low
-            scl_oe <= 1'b1; // SCL low
-            state  <= ST_STOP_2;
-          end
-
-          ST_STOP_2:
-          begin
-            sda_oe <= 1'b1; // keep SDA low
-            scl_oe <= 1'b0; // release SCL high
-            state  <= ST_STOP_3;
-          end
-
-          ST_STOP_3:
-          begin
-            sda_oe      <= 1'b0; // release SDA high
-            scl_oe      <= 1'b0;
-            bus_active  <= 1'b0;
-            done        <= 1'b1;
-            irq_pending <= 1'b1;
-            op_busy     <= 1'b0;
-            state       <= ST_IDLE;
+              default:
+              begin
+                scl_out    <= 1'b1;
+                sda_oe     <= 1'b0;   // SDA rising while SCL high
+                bus_active <= 1'b0;
+                busy       <= 1'b0;
+                done       <= 1'b1;
+                state      <= ST_IDLE;
+                phase      <= 2'd0;
+              end
+            endcase
           end
 
           default:
           begin
-            sda_oe      <= 1'b0;
-            scl_oe      <= 1'b0;
-            bus_active  <= 1'b0;
-            done        <= 1'b1;
-            ack_error   <= 1'b1;
-            irq_pending <= 1'b1;
-            op_busy     <= 1'b0;
-            state       <= ST_IDLE;
+            busy       <= 1'b0;
+            bus_active <= 1'b0;
+            state      <= ST_IDLE;
+            scl_out    <= 1'b1;
+            sda_oe     <= 1'b0;
+            done       <= 1'b1;
+            ack_error  <= 1'b1;
           end
         endcase
       end
@@ -1386,48 +1048,31 @@ module i2c_master_ctrl (
       begin
         cpu_dout[0] = enable;
         cpu_dout[1] = irq_enable;
-        cpu_dout[2] = 1'b0; // clock stretching removed
       end
 
       4'h1:
       begin
-        cpu_dout[0] = op_busy;
+        cpu_dout[0] = busy;
         cpu_dout[1] = bus_active;
         cpu_dout[2] = done;
         cpu_dout[3] = ack_error;
         cpu_dout[4] = rx_valid;
-        cpu_dout[5] = irq_pending;
+        cpu_dout[5] = done;       // minimal replacement for old irq_pending
       end
 
       4'h2:
       begin
-        cpu_dout = prescale_reg;
+        cpu_dout[7:0] = I2C_DIV;
       end
 
       4'h3:
       begin
-        cpu_dout[7:0] = rx_data_reg;
-      end
-
-      4'h4:
-      begin
-        cpu_dout[0] = cmd_start;
-        cpu_dout[1] = cmd_stop;
-        cpu_dout[2] = cmd_write;
-        cpu_dout[3] = cmd_read;
-        cpu_dout[4] = cmd_read_nack;
-      end
-
-      default:
-      begin
-        cpu_dout = 16'd0;
+        cpu_dout[7:0] = rx_data;
       end
     endcase
   end
 
 endmodule
-
-`default_nettype none
 
 module debug_serial_frontend_tiny
 (
@@ -1439,17 +1084,24 @@ module debug_serial_frontend_tiny
     output reg         dbg_data_out,
     output reg         dbg_data_oe,
 
-    output wire        reg_wr,
-    output wire [3:0]  reg_addr,
-    output wire [15:0] reg_wdata,
+    output reg         reg_wr,
+    output reg  [3:0]  reg_addr,
+    output reg  [15:0] reg_wdata,
     input  wire [15:0] reg_rdata
 );
+
+    // New RX protocol, MSB first:
+    //   8'hA5 sync + 4-bit cmd + 4-bit addr + 16-bit data = 32 clocks
+    // The RX side uses a sliding 32-bit window. If one clock is missed or extra,
+    // it automatically locks again when the next 8'hA5 header appears.
 
     localparam S_RX        = 3'd0;
     localparam S_EXEC      = 3'd1;
     localparam S_LOAD_TX   = 3'd2;
     localparam S_TURNAROUND= 3'd3;
     localparam S_TX        = 3'd4;
+
+    localparam SYNC_BYTE  = 8'hA5;
 
     localparam CMD_PING  = 4'h0;
     localparam CMD_READ  = 4'h1;
@@ -1466,18 +1118,23 @@ module debug_serial_frontend_tiny
     assign dbg_clk_rise = (dbg_clk_sync[2:1] == 2'b01);
     assign dbg_clk_fall = (dbg_clk_sync[2:1] == 2'b10);
 
-    reg [23:0] rx_shift;
-    reg [4:0]  rx_count;
+    reg [31:0] rx_shift;
+    wire [31:0] rx_next;
+    wire        rx_next_cmd_valid;
+    wire        rx_next_is_frame;
+
+    assign rx_next = {rx_shift[30:0], dbg_data_sync[1]};
+    assign rx_next_cmd_valid = (rx_next[23:20] == CMD_PING)  |
+                               (rx_next[23:20] == CMD_READ)  |
+                               (rx_next[23:20] == CMD_WRITE);
+    assign rx_next_is_frame = (rx_next[31:24] == SYNC_BYTE) & rx_next_cmd_valid;
+
+    reg [3:0]  cmd_latched;
+    reg [3:0]  addr_latched;
+    reg [15:0] data_latched;
 
     reg [15:0] tx_shift;
     reg [4:0]  tx_count;
-
-    wire [3:0] cmd_decoded;
-
-    assign cmd_decoded = rx_shift[23:20];
-    assign reg_addr    = rx_shift[19:16];
-    assign reg_wdata   = rx_shift[15:0];
-    assign reg_wr      = (state == S_EXEC) && (cmd_decoded == CMD_WRITE);
 
     always @(posedge cpu_clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -1486,40 +1143,52 @@ module debug_serial_frontend_tiny
             dbg_data_sync<= 2'b11;
             dbg_data_out <= 1'b1;
             dbg_data_oe  <= 1'b0;
-            rx_shift     <= 24'h000000;
-            rx_count     <= 5'd0;
+            reg_wr       <= 1'b0;
+            reg_addr     <= 4'h0;
+            reg_wdata    <= 16'h0000;
+            rx_shift     <= 32'h00000000;
+            cmd_latched  <= 4'h0;
+            addr_latched <= 4'h0;
+            data_latched <= 16'h0000;
             tx_shift     <= 16'h0000;
             tx_count     <= 5'd0;
         end else begin
             dbg_clk_sync  <= {dbg_clk_sync[1:0], dbg_clk};
             dbg_data_sync <= {dbg_data_sync[0], dbg_data_in};
+            reg_wr <= 1'b0;
 
             case (state)
                 S_RX: begin
                     dbg_data_oe  <= 1'b0;
                     dbg_data_out <= 1'b1;
+
                     if (dbg_clk_rise) begin
-                        if (rx_count == 5'd23) begin
-                            rx_shift <= {rx_shift[22:0], dbg_data_sync[1]};
-                            rx_count <= 5'd0;
-                            state    <= S_EXEC;
+                        if (rx_next_is_frame) begin
+                            cmd_latched  <= rx_next[23:20];
+                            addr_latched <= rx_next[19:16];
+                            data_latched <= rx_next[15:0];
+                            rx_shift     <= 32'h00000000;
+                            state        <= S_EXEC;
                         end else begin
-                            rx_shift <= {rx_shift[22:0], dbg_data_sync[1]};
-                            rx_count <= rx_count + 5'd1;
+                            rx_shift <= rx_next;
                         end
                     end
                 end
 
                 S_EXEC: begin
+                    reg_addr  <= addr_latched;
+                    reg_wdata <= data_latched;
+                    if (cmd_latched == CMD_WRITE)
+                        reg_wr <= 1'b1;
                     state <= S_LOAD_TX;
                 end
 
                 S_LOAD_TX: begin
-                    if (cmd_decoded == CMD_PING)
+                    if (cmd_latched == CMD_PING)
                         tx_shift <= 16'hDB12;
-                    else if (cmd_decoded == CMD_READ)
+                    else if (cmd_latched == CMD_READ)
                         tx_shift <= reg_rdata;
-                    else if (cmd_decoded == CMD_WRITE)
+                    else if (cmd_latched == CMD_WRITE)
                         tx_shift <= 16'hACCE;
                     else
                         tx_shift <= 16'hEEEE;
@@ -1544,6 +1213,7 @@ module debug_serial_frontend_tiny
                         if (tx_count == 5'd15) begin
                             dbg_data_oe  <= 1'b0;
                             dbg_data_out <= 1'b1;
+                            rx_shift     <= 32'h00000000;
                             state        <= S_RX;
                         end else begin
                             tx_shift     <= {tx_shift[14:0], 1'b0};
@@ -1557,14 +1227,13 @@ module debug_serial_frontend_tiny
                     state        <= S_RX;
                     dbg_data_oe  <= 1'b0;
                     dbg_data_out <= 1'b1;
+                    rx_shift     <= 32'h00000000;
                 end
             endcase
         end
     end
 
 endmodule
-
-`default_nettype wire
 
 module cpu_cycle_controller_tiny
 (
@@ -1748,7 +1417,6 @@ module memory_wait_controller_tiny
 
   reg [2:0] state;
   reg [1:0] op;
-  reg [15:0] last_flash_addr;
 
 
   always @(posedge clk or negedge rst_n)
@@ -1766,7 +1434,6 @@ module memory_wait_controller_tiny
       spi_addr           <= 16'h0000;
       spi_data_in        <= 16'h0000;
       spi_target         <= 1'b0;
-      last_flash_addr    <= 16'h0000;
     end
     else
     begin
@@ -1851,7 +1518,6 @@ module memory_wait_controller_tiny
           if (op == OP_FETCH)
           begin
             fetch_done         <= 1'b1;
-            last_flash_addr    <= spi_addr;
           end
           else
           begin
@@ -1892,55 +1558,73 @@ module debug_core_tiny
     // Debug control outputs
     output reg         dbg_enable,
     output reg         dbg_halt_req,
-    output wire        dbg_run_req,
-    output wire        dbg_step_req,
+    output reg         dbg_run_req,
+    output reg         dbg_step_req,
     output reg         static_break_enable,
 
     output wire        dbg_break_hit,
-    output wire        dbg_break_after_exec
+    output wire        dbg_break_after_exec,
+    // New one-cycle debug actions
+    output reg         dbg_soft_reset_req,
+    output reg         dbg_jump_req,
+    output reg  [15:0] dbg_jump_addr
+
   );
 
-  localparam REG_ID      = 4'h0;
-  localparam REG_STATUS  = 4'h1;
-  localparam REG_CONTROL = 4'h2;
-  localparam REG_FLAGS   = 4'h3;
-  localparam REG_PC      = 4'h4;
-  localparam REG_IR      = 4'h5;
-  localparam REG_BP0     = 4'h8;
-  localparam REG_BPCTRL  = 4'h9;
+  localparam REG_ID        = 4'h0;
+  localparam REG_STATUS    = 4'h1;
+  localparam REG_CONTROL   = 4'h2;
+  localparam REG_FLAGS     = 4'h3;
+  localparam REG_PC        = 4'h4;
+  localparam REG_IR        = 4'h5;
+  localparam REG_BP0       = 4'h6;
+  localparam REG_BPCTRL    = 4'h7;
+  localparam REG_JUMP_ADDR = 4'h8;
 
+  // REG_CONTROL bits, write side:
+  //   bit0 = debug enable level
+  //   bit1 = halt request level/set
+  //   bit2 = run pulse
+  //   bit3 = step pulse
+  //   bit4 = soft reset pulse
+  //   bit5 = static BRK enable level
+  //   bit6 = jump/load-PC pulse using REG_JUMP_ADDR
+
+  // One dynamic breakpoint only
   reg  [15:0] bp0;
   reg         bp_enable;
   reg         bp_resume_mask;
+  wire        resume_cmd;
+  wire        bp_raw_hit;
 
-  wire ctrl_wr;
-  wire run_pulse;
-  wire step_pulse;
-  wire resume_cmd;
-  wire bp_raw_hit;
+  assign resume_cmd = dbg_run_req | dbg_step_req;
+  assign bp_raw_hit = dbg_enable & bp_enable & (cpu_pc == bp0);
 
-  assign ctrl_wr              = reg_wr & (reg_addr == REG_CONTROL);
-  assign run_pulse            = ctrl_wr & reg_wdata[0] & reg_wdata[2];
-  assign step_pulse           = ctrl_wr & reg_wdata[0] & reg_wdata[3];
-  assign dbg_run_req          = run_pulse;
-  assign dbg_step_req         = step_pulse;
-  assign resume_cmd           = run_pulse | step_pulse;
-  assign bp_raw_hit           = dbg_enable & bp_enable & (cpu_pc == bp0);
-  assign dbg_break_hit        = bp_raw_hit & ~bp_resume_mask;
+  assign dbg_break_hit = bp_raw_hit & ~bp_resume_mask;
   assign dbg_break_after_exec = dbg_enable & static_break_enable & instr_is_brk;
 
   always @(posedge clk or negedge rst_n)
   begin
     if (!rst_n)
     begin
-      dbg_enable          <= 1'b0;
-      dbg_halt_req        <= 1'b0;
-      static_break_enable <= 1'b0;
-      bp0                 <= 16'h0000;
-      bp_enable           <= 1'b0;
+      dbg_enable           <= 1'b0;
+      dbg_halt_req         <= 1'b0;
+      dbg_run_req          <= 1'b0;
+      dbg_step_req         <= 1'b0;
+      static_break_enable  <= 1'b0;
+      dbg_soft_reset_req   <= 1'b0;
+      dbg_jump_req         <= 1'b0;
+      dbg_jump_addr        <= 16'h0000;
+      bp0                  <= 16'h0000;
+      bp_enable            <= 1'b0;
     end
     else
     begin
+      dbg_run_req        <= 1'b0;
+      dbg_step_req       <= 1'b0;
+      dbg_soft_reset_req <= 1'b0;
+      dbg_jump_req       <= 1'b0;
+
       if (cpu_dbg_halted)
         dbg_halt_req <= 1'b0;
 
@@ -1952,10 +1636,34 @@ module debug_core_tiny
             dbg_enable          <= reg_wdata[0];
             static_break_enable <= reg_wdata[5];
 
-            if (!reg_wdata[0] || reg_wdata[2] || reg_wdata[3])
+            if (!reg_wdata[0])
               dbg_halt_req <= 1'b0;
-            else if (reg_wdata[1])
+
+            if (reg_wdata[1] && reg_wdata[0])
               dbg_halt_req <= 1'b1;
+
+            if (reg_wdata[2] && reg_wdata[0])
+            begin
+              dbg_run_req  <= 1'b1;
+              dbg_halt_req <= 1'b0;
+            end
+
+            if (reg_wdata[3] && reg_wdata[0])
+            begin
+              dbg_step_req <= 1'b1;
+              dbg_halt_req <= 1'b0;
+            end
+
+            if (reg_wdata[4] && reg_wdata[0])
+            begin
+              dbg_soft_reset_req <= 1'b1;
+              dbg_halt_req       <= 1'b0;
+            end
+
+            if (reg_wdata[6] && reg_wdata[0])
+            begin
+              dbg_jump_req <= 1'b1;
+            end
           end
 
           REG_BP0:
@@ -1963,6 +1671,9 @@ module debug_core_tiny
 
           REG_BPCTRL:
             bp_enable <= reg_wdata[0];
+
+          REG_JUMP_ADDR:
+            dbg_jump_addr <= reg_wdata;
 
           default:
           begin
@@ -1980,22 +1691,27 @@ module debug_core_tiny
 
       REG_STATUS:
         reg_rdata = {
-          12'h000,
+          8'h00,
+          bp_resume_mask,
           bp_enable,
           static_break_enable,
           dbg_enable,
-          cpu_dbg_halted
+          cpu_dbg_halted,
+          dbg_soft_reset_req,
+          dbg_jump_req,
+          dbg_halt_req
         };
 
       REG_CONTROL:
         reg_rdata = {
-          10'h000,
-          static_break_enable,
-          1'b0,
-          1'b0,
-          1'b0,
-          dbg_halt_req,
-          dbg_enable
+          9'h000,
+          1'b0,                  // bit6 jump is write-only pulse
+          static_break_enable,   // bit5
+          1'b0,                  // bit4 soft reset is write-only pulse
+          1'b0,                  // bit3 step is write-only pulse
+          1'b0,                  // bit2 run is write-only pulse
+          dbg_halt_req,          // bit1
+          dbg_enable             // bit0
         };
 
       REG_FLAGS:
@@ -2013,6 +1729,9 @@ module debug_core_tiny
       REG_BPCTRL:
         reg_rdata = {15'h0000, bp_enable};
 
+      REG_JUMP_ADDR:
+        reg_rdata = dbg_jump_addr;
+
       default:
         reg_rdata = 16'h0000;
     endcase
@@ -2027,6 +1746,612 @@ module debug_core_tiny
     else if (cpu_dbg_halted & resume_cmd)
       bp_resume_mask <= 1'b1;
   end
+endmodule
+
+// Flat / no-instantiation memory interface.
+// Area-focused version: Flash = QSPI continuous read, RAM = plain SPI read/write.
+//
+// Main area reductions versus initwait version:
+//   - no 24-bit runtime address shift register
+//   - no 16-bit runtime write-data shift register
+//   - no 8-bit RAM command shift register
+//   - no 8-bit flash mode shift register
+//   - smaller state/counter registers
+//   - smaller init wait counter for 50 MHz / 40 ms max default wait
+//   - RAM reset/init removed to save area; RAM CS stays high during init
+//
+// CPU side:
+//   spi_target = 0 -> Flash read only, byte address {7'b0, addr, 1'b0}
+//   spi_target = 1 -> RAM read/write, byte address {1'b0, 6'b0, addr, 1'b0}
+//
+// External bus pins:
+//   Flash QSPI uses IO[3:0].
+//   RAM SPI uses IO0 = MOSI and IO1 = MISO. IO2/IO3 are released for RAM.
+
+module qspi_memory_interface (
+    input  wire        clk,
+    input  wire        spi_rst_n,
+
+    input  wire        st,
+    input  wire        ld,
+    input  wire        spi_target,    // 0 = flash, 1 = RAM
+    input  wire [15:0] addr,
+    input  wire [15:0] data_in,
+    output reg  [15:0] data_out,
+
+    output wire        spi_clk,
+    output wire        spi_flash_cs,  // active low
+    output wire        spi_ram_cs,    // active low
+
+    input  wire [3:0]  spi_data_in,
+    output wire [3:0]  spi_data_out,
+    output wire [3:0]  spi_data_oe,
+
+    output reg         busy
+);
+
+// ============================================================
+// 0) Shared output mux: init owns pins until init_done = 1
+// ============================================================
+
+    wire init_done;
+
+    reg        init_spi_clk;
+    reg        init_flash_cs;
+    reg        init_ram_cs;
+    reg [3:0]  init_data_out;
+    reg [3:0]  init_data_oe;
+
+    reg        core_spi_clk;
+    reg        core_flash_cs;
+    reg        core_ram_cs;
+    reg [3:0]  core_data_out;
+    reg [3:0]  core_data_oe;
+
+    assign spi_clk      = init_done ? core_spi_clk   : init_spi_clk;
+    assign spi_flash_cs = init_done ? core_flash_cs  : init_flash_cs;
+    assign spi_ram_cs   = init_done ? core_ram_cs    : init_ram_cs;
+    assign spi_data_out = init_done ? core_data_out  : init_data_out;
+    assign spi_data_oe  = init_done ? core_data_oe   : init_data_oe;
+
+// ============================================================
+// 1) CPU 16-bit word wrapper FSM
+// ============================================================
+
+    localparam W_IDLE       = 2'd0;
+    localparam W_START      = 2'd1;
+    localparam W_WAIT_BUSY  = 2'd2;
+    localparam W_WAIT_IDLE  = 2'd3;
+
+    reg [1:0]  wstate;
+    reg        op_is_read;
+    reg [15:0] core_addr_cpu;
+    reg [15:0] core_write_word;
+    reg        core_start_read;
+    reg        core_start_write;
+    reg        core_target_ram;
+
+    wire [15:0] core_read_word;
+    wire        core_busy;
+
+    always @(posedge clk or negedge spi_rst_n) begin
+        if (!spi_rst_n) begin
+            wstate           <= W_IDLE;
+            busy             <= 1'b0;
+            op_is_read       <= 1'b0;
+            core_addr_cpu    <= 16'h0000;
+            core_write_word  <= 16'h0000;
+            core_start_read  <= 1'b0;
+            core_start_write <= 1'b0;
+            core_target_ram  <= 1'b0;
+            data_out         <= 16'h0000;
+        end else begin
+            core_start_read  <= 1'b0;
+            core_start_write <= 1'b0;
+
+            case (wstate)
+                W_IDLE: begin
+                    busy <= !init_done;
+
+                    if (!init_done) begin
+                        wstate <= W_IDLE;
+                    end else if (ld) begin
+                        busy            <= 1'b1;
+                        op_is_read      <= 1'b1;
+                        core_target_ram <= spi_target;
+                        core_addr_cpu   <= addr;
+                        wstate          <= W_START;
+                    end else if (st) begin
+                        // Flash writing is intentionally blocked here.
+                        // RAM writes are SPI only.
+                        if (spi_target) begin
+                            busy             <= 1'b1;
+                            op_is_read       <= 1'b0;
+                            core_target_ram  <= 1'b1;
+                            core_addr_cpu    <= addr;
+                            core_write_word  <= data_in;
+                            wstate           <= W_START;
+                        end else begin
+                            busy   <= 1'b0;
+                            wstate <= W_IDLE;
+                        end
+                    end
+                end
+
+                W_START: begin
+                    busy <= 1'b1;
+                    if (op_is_read)
+                        core_start_read <= 1'b1;
+                    else
+                        core_start_write <= 1'b1;
+                    wstate <= W_WAIT_BUSY;
+                end
+
+                W_WAIT_BUSY: begin
+                    busy <= 1'b1;
+                    if (core_busy)
+                        wstate <= W_WAIT_IDLE;
+                end
+
+                W_WAIT_IDLE: begin
+                    if (!core_busy) begin
+                        if (op_is_read)
+                            data_out <= core_read_word;
+                        busy       <= 1'b0;
+                        op_is_read <= 1'b0;
+                        wstate     <= W_IDLE;
+                    end else begin
+                        busy <= 1'b1;
+                    end
+                end
+            endcase
+        end
+    end
+
+// ============================================================
+// 2) Startup initializer FSM
+// ============================================================
+
+    localparam I_IDLE       = 3'd0;
+    localparam I_WAIT_PWR   = 3'd1;
+    localparam I_LOAD       = 3'd2;
+    localparam I_SHIFT_LOW  = 3'd3;
+    localparam I_SHIFT_HIGH = 3'd4;
+    localparam I_CS_HIGH    = 3'd5;
+    localparam I_GAP        = 3'd6;
+    localparam I_DONE       = 3'd7;
+
+    localparam INIT_STEP_FLASH_RST_EN = 4'd0;
+    localparam INIT_STEP_FLASH_RST    = 4'd1;
+    localparam INIT_STEP_FLASH_WREN   = 4'd2;
+    localparam INIT_STEP_FLASH_SR2    = 4'd3;
+    localparam INIT_STEP_FLASH_EB     = 4'd4;
+    localparam INIT_STEP_FLASH_CONT   = 4'd5;
+    localparam INIT_STEP_END          = 4'd6;
+
+    // Default waits fit in 22 bits at 50 MHz:
+    // 40 ms = 2,000,000 cycles. If you increase INIT_CLK_HZ a lot,
+    // increase INIT_WAIT_BITS too.
+    localparam integer INIT_CLK_HZ      = 50000000;
+    localparam integer INIT_WAIT_BITS   = 22;
+`ifdef COCOTB_SIM_FAST_INIT
+    localparam [INIT_WAIT_BITS-1:0] INIT_POWER_WAIT_CYCLES      = 22'd82;
+    localparam [INIT_WAIT_BITS-1:0] INIT_RESET_WAIT_CYCLES      = 22'd82;
+    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_SR2_WAIT_CYCLES  = 22'd82;
+    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_CONT_WAIT_CYCLES = 22'd82;
+    localparam [INIT_WAIT_BITS-1:0] INIT_CMD_GAP_CYCLES         = 22'd82;
+`else
+    localparam [INIT_WAIT_BITS-1:0] INIT_POWER_WAIT_CYCLES      = (INIT_CLK_HZ / 1000) * 10;
+    localparam [INIT_WAIT_BITS-1:0] INIT_RESET_WAIT_CYCLES      = (INIT_CLK_HZ / 1000) * 2;
+    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_SR2_WAIT_CYCLES  = (INIT_CLK_HZ / 1000) * 40;
+    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_CONT_WAIT_CYCLES = (INIT_CLK_HZ / 1000) * 1;
+    localparam [INIT_WAIT_BITS-1:0] INIT_CMD_GAP_CYCLES         = (INIT_CLK_HZ / 1000000) * 5 + 4;
+`endif
+    function [INIT_WAIT_BITS-1:0] init_gap_cycles;
+        input [3:0] stp;
+        begin
+            case (stp)
+                INIT_STEP_FLASH_RST:  init_gap_cycles = INIT_RESET_WAIT_CYCLES;
+                INIT_STEP_FLASH_SR2:  init_gap_cycles = INIT_FLASH_SR2_WAIT_CYCLES;
+                INIT_STEP_FLASH_CONT: init_gap_cycles = INIT_FLASH_CONT_WAIT_CYCLES;
+                default:              init_gap_cycles = INIT_CMD_GAP_CYCLES;
+            endcase
+        end
+    endfunction
+
+    function [2:0] init_bytes_left;
+        input [3:0] stp;
+        begin
+            case (stp)
+                INIT_STEP_FLASH_SR2:  init_bytes_left = 3'd2;
+                INIT_STEP_FLASH_CONT: init_bytes_left = 3'd6;
+                INIT_STEP_END:        init_bytes_left = 3'd0;
+                default:              init_bytes_left = 3'd1;
+            endcase
+        end
+    endfunction
+
+    function [7:0] init_byte;
+        input [3:0] stp;
+        input [2:0] idx;
+        begin
+            case (stp)
+                INIT_STEP_FLASH_RST_EN: init_byte = 8'h66;
+                INIT_STEP_FLASH_RST:    init_byte = 8'h99;
+                INIT_STEP_FLASH_WREN:   init_byte = 8'h06;
+                INIT_STEP_FLASH_SR2:    init_byte = (idx == 3'd0) ? 8'h31 : 8'h02;
+                INIT_STEP_FLASH_EB:     init_byte = 8'hEB;
+                INIT_STEP_FLASH_CONT: begin
+                    case (idx)
+                        3'd0: init_byte = 8'h00; // addr[23:16]
+                        3'd1: init_byte = 8'h00; // addr[15:8]
+                        3'd2: init_byte = 8'h00; // addr[7:0]
+                        3'd3: init_byte = 8'hA0; // continuous-read mode bits
+                        default: init_byte = 8'h00; // dummy clocks
+                    endcase
+                end
+                default: init_byte = 8'h00;
+            endcase
+        end
+    endfunction
+
+    reg [2:0]  init_state;
+    reg [3:0]  init_step;
+    reg [7:0]  init_shift;
+    reg [2:0]  init_bit_cnt;
+    reg [INIT_WAIT_BITS-1:0] init_wait_cnt;
+    reg [2:0]  init_byte_idx;
+    reg        init_done_r;
+
+    wire       init_use_quad_w   = (init_step == INIT_STEP_FLASH_CONT);
+    wire [2:0] init_bytes_left_w = init_bytes_left(init_step);
+
+    assign init_done = init_done_r;
+
+    always @(posedge clk or negedge spi_rst_n) begin
+        if (!spi_rst_n) begin
+            init_state    <= I_IDLE;
+            init_step     <= INIT_STEP_FLASH_RST_EN;
+            init_done_r   <= 1'b0;
+            init_spi_clk  <= 1'b0;
+            init_flash_cs <= 1'b1;
+            init_ram_cs   <= 1'b1;
+            init_data_out <= 4'b0000;
+            init_data_oe  <= 4'b0000;
+            init_shift    <= 8'h00;
+            init_bit_cnt  <= 3'd0;
+            init_wait_cnt <= {INIT_WAIT_BITS{1'b0}};
+            init_byte_idx <= 3'd0;
+        end else begin
+            case (init_state)
+                I_IDLE: begin
+                    init_done_r   <= 1'b0;
+                    init_spi_clk  <= 1'b0;
+                    init_flash_cs <= 1'b1;
+                    init_ram_cs   <= 1'b1;
+                    init_data_oe  <= 4'b0000;
+                    init_wait_cnt <= INIT_POWER_WAIT_CYCLES;
+                    init_state    <= I_WAIT_PWR;
+                end
+
+                I_WAIT_PWR: begin
+                    if (init_wait_cnt != {INIT_WAIT_BITS{1'b0}})
+                        init_wait_cnt <= init_wait_cnt - {{(INIT_WAIT_BITS-1){1'b0}}, 1'b1};
+                    else
+                        init_state <= I_LOAD;
+                end
+
+                I_LOAD: begin
+                    if (init_step >= INIT_STEP_END) begin
+                        init_state <= I_DONE;
+                    end else begin
+                        init_spi_clk  <= 1'b0;
+                        init_flash_cs <= 1'b0;
+                        init_ram_cs   <= 1'b1;
+                        init_byte_idx <= 3'd0;
+                        init_shift    <= init_byte(init_step, 3'd0);
+                        init_bit_cnt  <= init_use_quad_w ? 3'd1 : 3'd7;
+                        init_state    <= I_SHIFT_LOW;
+                    end
+                end
+
+                I_SHIFT_LOW: begin
+                    init_spi_clk <= 1'b0;
+                    if (init_use_quad_w) begin
+                        init_data_oe  <= 4'b1111;
+                        init_data_out <= init_shift[7:4];
+                    end else begin
+                        // SPI command: IO0 = MOSI, IO1 = MISO released.
+                        init_data_oe  <= 4'b0001;
+                        init_data_out <= {3'b000, init_shift[7]};
+                    end
+                    init_state <= I_SHIFT_HIGH;
+                end
+
+                I_SHIFT_HIGH: begin
+                    init_spi_clk <= 1'b1;
+                    if (init_bit_cnt == 3'd0) begin
+                        if (init_byte_idx + 3'd1 >= init_bytes_left_w) begin
+                            init_state <= I_CS_HIGH;
+                        end else begin
+                            init_byte_idx <= init_byte_idx + 3'd1;
+                            init_shift    <= init_byte(init_step, init_byte_idx + 3'd1);
+                            init_bit_cnt  <= init_use_quad_w ? 3'd1 : 3'd7;
+                            init_state    <= I_SHIFT_LOW;
+                        end
+                    end else begin
+                        if (init_use_quad_w)
+                            init_shift <= {init_shift[3:0], 4'h0};
+                        else
+                            init_shift <= {init_shift[6:0], 1'b0};
+                        init_bit_cnt <= init_bit_cnt - 3'd1;
+                        init_state   <= I_SHIFT_LOW;
+                    end
+                end
+
+                I_CS_HIGH: begin
+                    init_spi_clk <= 1'b0;
+                    init_data_oe <= 4'b0000;
+
+                    // Keep flash CS low between EBh command and the quad address/mode/dummy part.
+                    if (init_step == INIT_STEP_FLASH_EB) begin
+                        init_flash_cs <= 1'b0;
+                        init_ram_cs   <= 1'b1;
+                        init_step     <= INIT_STEP_FLASH_CONT;
+                        init_state    <= I_LOAD;
+                    end else begin
+                        init_flash_cs <= 1'b1;
+                        init_ram_cs   <= 1'b1;
+                        init_wait_cnt <= init_gap_cycles(init_step);
+                        init_state    <= I_GAP;
+                    end
+                end
+
+                I_GAP: begin
+                    if (init_wait_cnt != {INIT_WAIT_BITS{1'b0}})
+                        init_wait_cnt <= init_wait_cnt - {{(INIT_WAIT_BITS-1){1'b0}}, 1'b1};
+                    else begin
+                        init_step  <= init_step + 4'd1;
+                        init_state <= I_LOAD;
+                    end
+                end
+
+                I_DONE: begin
+                    init_done_r   <= 1'b1;
+                    init_spi_clk  <= 1'b0;
+                    init_flash_cs <= 1'b1;
+                    init_ram_cs   <= 1'b1;
+                    init_data_oe  <= 4'b0000;
+                end
+            endcase
+        end
+    end
+
+// ============================================================
+// 3) Runtime memory core
+// ============================================================
+
+    localparam C_IDLE        = 4'd0;
+    localparam C_FLASH_ADDR  = 4'd1;
+    localparam C_FLASH_MODE  = 4'd2;
+    localparam C_FLASH_DUMMY = 4'd3;
+    localparam C_FLASH_DATA  = 4'd4;
+    localparam C_RAM_CMD     = 4'd5;
+    localparam C_RAM_ADDR    = 4'd6;
+    localparam C_RAM_DATA    = 4'd7;
+    localparam C_FINISH      = 4'd8;
+
+    reg [3:0]  core_state;
+    reg        core_is_writing;
+    reg [15:0] core_read_shift;
+    reg [4:0]  core_count;
+    reg [15:0] core_read_word_r;
+
+    assign core_busy      = (core_state != C_IDLE);
+    assign core_read_word = core_read_word_r;
+
+    // Address mapping. CPU address is word address, external memory is byte address.
+    wire [23:0] flash_byte_addr = {7'b0000000, core_addr_cpu, 1'b0};
+    wire [23:0] ram_byte_addr   = {1'b0, 6'b000000, core_addr_cpu, 1'b0};
+
+    wire ram_cmd_mosi = (core_count == 5'd1) ||
+                        ((core_count == 5'd0) && !core_is_writing); // write=02h, read=03h
+
+    always @(posedge clk or negedge spi_rst_n) begin
+        if (!spi_rst_n) begin
+            core_state       <= C_IDLE;
+            core_spi_clk     <= 1'b0;
+            core_flash_cs    <= 1'b1;
+            core_ram_cs      <= 1'b1;
+            core_data_oe     <= 4'b0000;
+            core_is_writing  <= 1'b0;
+            core_read_shift  <= 16'h0000;
+            core_count       <= 5'd0;
+            core_read_word_r <= 16'h0000;
+        end else if (!init_done) begin
+            core_state     <= C_IDLE;
+            core_spi_clk   <= 1'b0;
+            core_flash_cs  <= 1'b1;
+            core_ram_cs    <= 1'b1;
+            core_data_oe   <= 4'b0000;
+        end else begin
+            if (core_state == C_IDLE) begin
+                core_spi_clk  <= 1'b0;
+                core_data_oe  <= 4'b0000;
+                core_flash_cs <= 1'b1;
+                core_ram_cs   <= 1'b1;
+
+                if (core_start_read || core_start_write) begin
+                    core_is_writing <= core_start_write;
+                    core_read_shift <= 16'h0000;
+
+                    if (core_target_ram) begin
+                        // RAM stays plain SPI.
+                        core_flash_cs <= 1'b1;
+                        core_ram_cs   <= 1'b0;
+                        core_data_oe  <= 4'b0001; // IO0 MOSI only
+                        core_count    <= 5'd7;    // 8 SPI command bits
+                        core_state    <= C_RAM_CMD;
+                    end else begin
+                        // Flash is already in continuous QSPI read mode.
+                        core_flash_cs <= 1'b0;
+                        core_ram_cs   <= 1'b1;
+                        core_data_oe  <= 4'b1111;
+                        core_count    <= 5'd5; // 6 QSPI address nibbles
+                        core_state    <= C_FLASH_ADDR;
+                    end
+                end
+            end else if (core_state == C_FINISH) begin
+                // Hold CS low for one extra system clock with SCK low, then release.
+                core_spi_clk    <= 1'b0;
+                core_data_oe    <= 4'b0000;
+                core_flash_cs   <= 1'b1;
+                core_ram_cs     <= 1'b1;
+                core_is_writing <= 1'b0;
+                core_state      <= C_IDLE;
+            end else begin
+                // Two system clocks per external SPI/QSPI clock.
+                core_spi_clk <= !core_spi_clk;
+
+                // Advance/sample on the high phase just before we drive SCK low.
+                if (core_spi_clk) begin
+                    case (core_state)
+                        C_FLASH_ADDR: begin
+                            if (core_count == 5'd0) begin
+                                core_count <= 5'd1; // 2 QSPI mode nibbles: A,0
+                                core_state <= C_FLASH_MODE;
+                            end else begin
+                                core_count <= core_count - 5'd1;
+                            end
+                        end
+
+                        C_FLASH_MODE: begin
+                            if (core_count == 5'd0) begin
+                                core_data_oe <= 4'b0000;
+                                core_count   <= 5'd3; // 4 QSPI dummy clocks
+                                core_state   <= C_FLASH_DUMMY;
+                            end else begin
+                                core_count <= core_count - 5'd1;
+                            end
+                        end
+
+                        C_FLASH_DUMMY: begin
+                            if (core_count == 5'd0) begin
+                                core_count <= 5'd3; // 4 QSPI data clocks = 16 bits
+                                core_state <= C_FLASH_DATA;
+                            end else begin
+                                core_count <= core_count - 5'd1;
+                            end
+                        end
+
+                        C_FLASH_DATA: begin
+                            core_read_shift <= {core_read_shift[11:0], spi_data_in};
+                            if (core_count == 5'd0) begin
+                                core_read_word_r <= {core_read_shift[11:0], spi_data_in};
+                                core_state       <= C_FINISH;
+                            end else begin
+                                core_count <= core_count - 5'd1;
+                            end
+                        end
+
+                        C_RAM_CMD: begin
+                            if (core_count == 5'd0) begin
+                                core_count <= 5'd23; // 24 SPI address bits
+                                core_state <= C_RAM_ADDR;
+                            end else begin
+                                core_count <= core_count - 5'd1;
+                            end
+                        end
+
+                        C_RAM_ADDR: begin
+                            if (core_count == 5'd0) begin
+                                core_count <= 5'd15; // 16 data bits
+                                core_state <= C_RAM_DATA;
+                                if (core_is_writing)
+                                    core_data_oe <= 4'b0001; // keep driving MOSI
+                                else
+                                    core_data_oe <= 4'b0000; // release bus, RAM drives IO1/MISO
+                            end else begin
+                                core_count <= core_count - 5'd1;
+                            end
+                        end
+
+                        C_RAM_DATA: begin
+                            if (core_is_writing) begin
+                                if (core_count == 5'd0) begin
+                                    core_state <= C_FINISH;
+                                end else begin
+                                    core_count <= core_count - 5'd1;
+                                end
+                            end else begin
+                                core_read_shift <= {core_read_shift[14:0], spi_data_in[1]};
+                                if (core_count == 5'd0) begin
+                                    core_read_word_r <= {core_read_shift[14:0], spi_data_in[1]};
+                                    core_state       <= C_FINISH;
+                                end else begin
+                                    core_count <= core_count - 5'd1;
+                                end
+                            end
+                        end
+
+                        default: begin
+                            core_state <= C_FINISH;
+                        end
+                    endcase
+                end
+            end
+        end
+    end
+
+    always @(*) begin
+        core_data_out = 4'b1111;
+
+        case (core_state)
+            C_FLASH_ADDR: begin
+                case (core_count)
+                    5'd5: core_data_out = flash_byte_addr[23:20];
+                    5'd4: core_data_out = flash_byte_addr[19:16];
+                    5'd3: core_data_out = flash_byte_addr[15:12];
+                    5'd2: core_data_out = flash_byte_addr[11:8];
+                    5'd1: core_data_out = flash_byte_addr[7:4];
+                    default: core_data_out = flash_byte_addr[3:0];
+                endcase
+            end
+
+            C_FLASH_MODE: begin
+                core_data_out = (core_count == 5'd1) ? 4'hA : 4'h0;
+            end
+
+            C_FLASH_DUMMY: begin
+                core_data_out = 4'b1111;
+            end
+
+            C_FLASH_DATA: begin
+                core_data_out = 4'b1111;
+            end
+
+            C_RAM_CMD: begin
+                // RAM SPI MOSI on IO0. IO1/2/3 are released by OE.
+                core_data_out = {3'b111, ram_cmd_mosi};
+            end
+
+            C_RAM_ADDR: begin
+                core_data_out = {3'b111, ram_byte_addr[core_count]};
+            end
+
+            C_RAM_DATA: begin
+                if (core_is_writing)
+                    core_data_out = {3'b111, core_write_word[core_count]};
+                else
+                    core_data_out = 4'b1111;
+            end
+
+            default: begin
+                core_data_out = 4'b1111;
+            end
+        endcase
+    end
+
 endmodule
 
 module DIG_Add
@@ -2416,182 +2741,185 @@ endmodule
 module tt_um_remedy_cpu (
   input [7:0] ui_in,
   input clk,
-  input [7:0] uio_in,
   input ena,
   input rst_n,
+  input [7:0] uio_in,
   output [7:0] uo_out,
   output [7:0] uio_out,
   output [7:0] uio_oe
 );
   wire muxA;
   wire [15:0] s0;
+  wire [15:0] DataOut;
   wire [15:0] s1;
-  wire [15:0] s2;
   wire [2:0] muxB;
   wire [15:0] ImmReg;
+  wire [15:0] s2;
   wire [15:0] s3;
   wire [15:0] s4;
   wire [15:0] s5;
-  wire [15:0] s6;
   wire [15:0] inst_reg;
+  wire [3:0] s6;
   wire [3:0] s7;
-  wire [3:0] s8;
   wire [7:0] OPcode;
-  wire [1:0] s9;
-  wire [15:0] s10;
+  wire [1:0] s8;
+  wire [15:0] AddrOut;
   wire [15:0] mem_out;
   wire [15:0] iow_Din;
-  wire [15:0] s11;
-  wire [15:0] s12;
-  wire [1:0] s13;
+  wire [15:0] s9;
+  wire [15:0] s10;
+  wire [1:0] s11;
+  wire s12;
+  wire s13;
   wire s14;
   wire s15;
-  wire s16;
-  wire s17;
   wire [2:0] br;
-  wire [7:0] s18;
+  wire [7:0] s16;
   wire imm;
   wire [1:0] iem;
-  wire s19;
+  wire Clk_in;
   wire [15:0] inputReg;
   wire [7:0] inputFromOutside;
-  wire [6:0] s20;
-  wire [6:0] s21;
+  wire [6:0] s17;
+  wire [6:0] s18;
+  wire s19;
+  wire s20;
+  wire s21;
   wire s22;
   wire s23;
   wire s24;
   wire s25;
   wire s26;
   wire s27;
+  wire [5:0] aluOp;
   wire s28;
   wire s29;
   wire s30;
-  wire [5:0] aluOp;
   wire s31;
   wire s32;
-  wire s33;
-  wire s34;
-  wire s35;
   wire intr;
   wire \execute-pulse ;
-  wire s36;
+  wire s33;
   wire Reti;
+  wire s34;
+  wire [4:0] s35;
+  wire s36;
+  wire ioW;
   wire s37;
-  wire s38;
+  wire [7:0] s38;
   wire s39;
-  wire s40;
-  wire [7:0] s41;
-  wire s42;
   wire sf;
-  wire s43;
-  wire s44;
-  wire [7:0] uo_out_temp;
+  wire s40;
+  wire s41;
+  wire [7:0] outputToOutside;
+  wire s42;
   wire pc_en;
-  wire s45;
-  wire s46;
+  wire s43;
+  wire [15:0] deb_jump_addr;
+  wire deb_jump_req;
+  wire s44;
   wire [15:0] programAddr;
-  wire s47;
-  wire s48;
+  wire s45;
+  wire ioR;
   wire stPC;
   wire [15:0] outR;
-  wire spi_st;
-  wire spi_ld;
-  wire [15:0] spi_addr;
-  wire [15:0] spi_data_out;
-  wire spi_miso;
-  wire [15:0] spi_data;
-  wire spi_cs;
-  wire spi_clock_ram;
-  wire spi_busy_ram;
-  wire spi_mosi_ram;
-  wire s49;
+  wire s46;
   wire WE;
   wire ld;
   wire data_done;
-  wire s50;
-  wire s51;
-  wire s52;
+  wire s47;
+  wire s48;
+  wire s49;
   wire Fetch_done;
   wire abs;
-  wire [3:0] s53;
-  wire [2:0] s54;
+  wire [3:0] s50;
+  wire rst_complex;
+  wire [2:0] s51;
   wire [15:0] intr_reg;
   wire InterLock;
-  wire s55;
-  wire s56;
+  wire s52;
+  wire s53;
   wire i2c_inter;
-  wire [7:0] s57;
+  wire [7:0] s54;
   wire [15:0] rngdat0;
   wire [15:0] timerdat1;
-  wire [8:0] s58;
+  wire [8:0] s55;
   wire [15:0] timerdat2;
-  wire [2:0] s59;
+  wire [2:0] s56;
   wire [15:0] i2cDat;
-  wire [4:0] s60;
-  wire s61;
-  wire [3:0] s62;
+  wire [4:0] s57;
+  wire s58;
+  wire [3:0] s59;
   wire \sda-in ;
-  wire \scl-in ;
   wire sda_o;
   wire scl_o;
-  wire sda_oe;
   wire scl_oe;
+  wire sda_oe;
   wire st;
   wire flash_req;
   wire Break;
-  wire spi_target;
-  wire spics_ram;
+  wire s60;
+  wire s61;
+  wire s62;
   wire s63;
-  wire spics_flash;
   wire s64;
   wire s65;
   wire s66;
-  wire s67;
-  wire s68;
-  wire s69;
-  wire s70;
   wire [2:0] flag_out;
   wire dbg_clk;
   wire dbg_data_in;
   wire [15:0] reg_rdata;
   wire dbg_data_out;
   wire dbg_data_oe;
+  wire s67;
+  wire [3:0] s68;
+  wire [15:0] s69;
+  wire s70;
   wire s71;
-  wire [3:0] s72;
-  wire [15:0] s73;
-  wire s74;
-  wire s75;
-  wire s76;
-  wire s77;
+  wire s72;
+  wire s73;
   wire dbg_en;
   wire halt_req;
   wire run_req;
   wire step_req;
-  wire s78;
-  wire s79;
+  wire s74;
+  wire s75;
   wire fetch_request_pulse;
   wire dbg_halted;
+  wire [15:0] spi_data;
+  wire spi_busy_ram;
+  wire spi_st;
+  wire spi_ld;
+  wire [15:0] spi_addr;
+  wire [15:0] spi_data_out;
+  wire spi_target;
   wire ststic_break_en;
-  wire s80;
-  wire s81;
-  wire s82;
-  wire s83;
+  wire soft_reset_req;
+  wire spics_flash;
+  wire spi_clock;
+  wire spics_ram;
+  wire [3:0] qspi_data_in;
+  wire [3:0] qspi_data_out;
+  wire [3:0] qspi_data_oe;
+  wire s76;
+  wire s77;
+  wire s78;
+  wire s79;
   Mux_2x1 Mux_2x1_i0 (
     .sel( ena ),
     .in_0( 1'b1 ),
     .in_1( clk ),
-    .out( s19 )
+    .out( Clk_in )
   );
-  assign spi_miso = uio_in[0];
-  assign s80 = uio_in[1];
-  assign s81 = uio_in[2];
-  assign s82 = uio_in[3];
-  assign s83 = uio_in[4];
-  assign \sda-in  = uio_in[5];
-  assign \scl-in  = uio_in[6];
-  assign dbg_data_in = uio_in[7];
+  assign qspi_data_in[0] = uio_in[1];
+  assign qspi_data_in[1] = uio_in[2];
+  assign qspi_data_in[2] = uio_in[4];
+  assign qspi_data_in[3] = uio_in[5];
+  assign \sda-in  = uio_in[7];
+  assign dbg_data_in = ui_in[6];
   assign dbg_clk = ui_in[7];
-  assign inputFromOutside[6:0] = ui_in[6:0];
+  assign inputFromOutside[5:0] = ui_in[5:0];
+  assign inputFromOutside[6] = dbg_data_in;
   assign inputFromOutside[7] = dbg_clk;
   assign inputReg[0] = inputFromOutside[0];
   assign inputReg[1] = inputFromOutside[1];
@@ -2605,153 +2933,140 @@ module tt_um_remedy_cpu (
   ImReg ImReg_i1 (
     .en( imm ),
     .iem( iem ),
-    .C( s19 ),
+    .C( Clk_in ),
     .inst( inst_reg ),
     .imm( ImmReg )
   );
   // NegR
   register_1bit register_1bit_i2 (
-    .D( s42 ),
-    .C( s19 ),
-    .en( sf ),
-    .rst( rst_n ),
-    .Q( s16 )
-  );
-  // ZeroR
-  register_1bit register_1bit_i3 (
-    .D( s43 ),
-    .C( s19 ),
-    .en( sf ),
-    .rst( rst_n ),
-    .Q( s15 )
-  );
-  // CarryR
-  register_1bit register_1bit_i4 (
-    .D( s44 ),
-    .C( s19 ),
+    .D( s39 ),
+    .C( Clk_in ),
     .en( sf ),
     .rst( rst_n ),
     .Q( s14 )
   );
+  // ZeroR
+  register_1bit register_1bit_i3 (
+    .D( s40 ),
+    .C( Clk_in ),
+    .en( sf ),
+    .rst( rst_n ),
+    .Q( s13 )
+  );
+  // CarryR
+  register_1bit register_1bit_i4 (
+    .D( s41 ),
+    .C( Clk_in ),
+    .en( sf ),
+    .rst( rst_n ),
+    .Q( s12 )
+  );
   // outputReg
   register_8bit register_8bit_i5 (
-    .D( s41 ),
-    .C( s19 ),
-    .en( s40 ),
+    .D( s38 ),
+    .C( Clk_in ),
+    .en( s37 ),
     .rst( rst_n ),
-    .Q( uo_out_temp )
+    .Q( outputToOutside )
   );
   // programCounter
   programCounter programCounter_i6 (
-    .AluIn( s10 ),
-    .clk( s19 ),
-    .rst_n( rst_n ),
+    .AluIn( AddrOut ),
+    .clk( Clk_in ),
+    .rst_n( s42 ),
     .pc_en( pc_en ),
-    .absJmp( s45 ),
-    .intr( s36 ),
-    .reti( s37 ),
-    .relJmp( s46 ),
+    .absJmp( s43 ),
+    .intr( s33 ),
+    .reti( s34 ),
+    .deb_jump_addr( deb_jump_addr ),
+    .deb_jump( deb_jump_req ),
+    .relJmp( s44 ),
     .PC( programAddr )
-  );
-  // spi_memory_interface
-  spi_memory_interface spi_memory_interface_i7 (
-    .clk( s19 ),
-    .spi_rst_n( rst_n ),
-    .st( spi_st ),
-    .ld( spi_ld ),
-    .addr( spi_addr ),
-    .data_in( spi_data_out ),
-    .spi_miso( spi_miso ),
-    .data_out( spi_data ),
-    .spi_cs( spi_cs ),
-    .spi_clk( spi_clock_ram ),
-    .busy( spi_busy_ram ),
-    .spi_mosi( spi_mosi_ram )
   );
   DIG_Register_BUS #(
     .Bits(16)
   )
-  DIG_Register_BUS_i8 (
+  DIG_Register_BUS_i7 (
     .D( mem_out ),
-    .C( s19 ),
+    .C( Clk_in ),
     .en( Fetch_done ),
     .Q( inst_reg )
   );
   // interrupt_controller_small
-  interrupt_controller_small interrupt_controller_small_i9 (
-    .dOut( s53 ),
-    .Addr( s10 ),
-    .ioW( s39 ),
-    .C( s19 ),
-    .rst_n( rst_n ),
-    .irq_in( s54 ),
+  interrupt_controller_small interrupt_controller_small_i8 (
+    .dOut( s50 ),
+    .Addr( s35 ),
+    .ioW( ioW ),
+    .C( Clk_in ),
+    .rst_n( rst_complex ),
+    .irq_in( s51 ),
     .imm( imm ),
     .reti( Reti ),
     .pc_en( pc_en ),
-    .CPUInterruptEnableAddr( 16'b1101 ),
-    .inputInterruptAddr( 16'b1110 ),
-    .interruptRegAddr( 16'b1111 ),
+    .CPUInterruptEnableAddr( 5'b1101 ),
+    .inputInterruptAddr( 5'b1110 ),
+    .interruptRegAddr( 5'b1111 ),
     .InterruptOut( intr_reg ),
     .intr( intr ),
     .irq_lock( InterLock )
   );
   // lfsr_RandomNumberGen
-  lfsr_RandomNumberGen lfsr_RandomNumberGen_i10 (
-    .adrrIn( s10 ),
-    .dataIn( s57 ),
-    .ioW( s39 ),
-    .clk( s19 ),
-    .SeedAdr( 16'b1011 ),
-    .RngAdr( 16'b1100 ),
+  lfsr_RandomNumberGen lfsr_RandomNumberGen_i9 (
+    .adrrIn( s35 ),
+    .dataIn( s54 ),
+    .ioW( ioW ),
+    .clk( Clk_in ),
+    .SeedAdr( 5'b1011 ),
+    .RngAdr( 5'b1100 ),
     .Out( rngdat0 )
   );
   // timer
-  timer timer_i11 (
-    .dOut( s1 ),
-    .Addr( s10 ),
-    .ioW( s39 ),
-    .C( s19 ),
+  timer timer_i10 (
+    .dOut( DataOut ),
+    .Addr( s35 ),
+    .ioW( ioW ),
+    .C( Clk_in ),
     .InterLock( InterLock ),
-    .timerConfigAddr( 16'b10 ),
-    .timerTargetAddr( 16'b11 ),
-    .timerResetAddr( 16'b100 ),
-    .timerReadAddr( 16'b101 ),
-    .timerSyncStartAddr( 16'b1010 ),
+    .timerConfigAddr( 5'b10 ),
+    .timerTargetAddr( 5'b11 ),
+    .timerResetAddr( 5'b100 ),
+    .timerReadAddr( 5'b101 ),
+    .timerSyncStartAddr( 5'b1010 ),
     .rst_n( rst_n ),
     .TimerOut( timerdat1 ),
-    .timer_interrupt( s55 )
+    .timer_interrupt( s52 )
   );
   // timer_tiny
-  timer_tiny timer_tiny_i12 (
-    .dOut( s58 ),
-    .Addr( s10 ),
-    .ioW( s39 ),
-    .C( s19 ),
+  timer_tiny timer_tiny_i11 (
+    .dOut( s55 ),
+    .Addr( s35 ),
+    .ioW( ioW ),
+    .C( Clk_in ),
     .InterLock( InterLock ),
-    .timerConfigAddr( 16'b110 ),
-    .timerTargetAddr( 16'b111 ),
-    .timerResetAddr( 16'b1000 ),
-    .timerReadAddr( 16'b1001 ),
-    .timerSyncStartAddr( 16'b1010 ),
+    .timerConfigAddr( 5'b110 ),
+    .timerTargetAddr( 5'b111 ),
+    .timerResetAddr( 5'b1000 ),
+    .timerReadAddr( 5'b1001 ),
+    .timerSyncStartAddr( 5'b1010 ),
     .rst_n( rst_n ),
     .TimerOut( timerdat2 ),
-    .timer_interrupt( s56 )
+    .timer_interrupt( s53 )
   );
   // RegisterBlock
-  RegisterBlock RegisterBlock_i13 (
-    .DataIn( s12 ),
+  RegisterBlock RegisterBlock_i12 (
+    .DataIn( s10 ),
     .WE( WE ),
-    .clk( s19 ),
-    .src( s7 ),
-    .Dest( s8 ),
+    .clk( Clk_in ),
+    .src( s6 ),
+    .Dest( s7 ),
     .RDest( s0 ),
-    .Rsrc( s1 )
+    .Rsrc( DataOut )
   );
   Mux_8x1_NBits #(
     .Bits(16)
   )
-  Mux_8x1_NBits_i14 (
-    .sel( s59 ),
+  Mux_8x1_NBits_i13 (
+    .sel( s56 ),
     .in_0( inputReg ),
     .in_1( outR ),
     .in_2( timerdat1 ),
@@ -2763,38 +3078,37 @@ module tt_um_remedy_cpu (
     .out( iow_Din )
   );
   // i2c_master_ctrl
-  i2c_master_ctrl i2c_master_ctrl_i15 (
-    .clk( s19 ),
+  i2c_master_ctrl i2c_master_ctrl_i14 (
+    .clk( Clk_in ),
     .rst_n( rst_n ),
-    .wr_en( s61 ),
-    .reg_addr( s62 ),
-    .cpu_din( s1 ),
+    .wr_en( s58 ),
+    .reg_addr( s59 ),
+    .cpu_din( DataOut ),
     .sda_in( \sda-in  ),
-    .scl_in( \scl-in  ),
     .cpu_dout( i2cDat ),
     .sda_out( sda_o ),
     .scl_out( scl_o ),
-    .sda_oe( sda_oe ),
     .scl_oe( scl_oe ),
+    .sda_oe( sda_oe ),
     .interrupt( i2c_inter )
   );
   // debug_serial_frontend_tiny
-  debug_serial_frontend_tiny debug_serial_frontend_tiny_i16 (
-    .cpu_clk( s19 ),
+  debug_serial_frontend_tiny debug_serial_frontend_tiny_i15 (
+    .cpu_clk( Clk_in ),
     .rst_n( rst_n ),
     .dbg_clk( dbg_clk ),
     .dbg_data_in( dbg_data_in ),
     .reg_rdata( reg_rdata ),
     .dbg_data_out( dbg_data_out ),
     .dbg_data_oe( dbg_data_oe ),
-    .reg_wr( s71 ),
-    .reg_addr( s72 ),
-    .reg_wdata( s73 )
+    .reg_wr( s67 ),
+    .reg_addr( s68 ),
+    .reg_wdata( s69 )
   );
   // cpu_cycle_controller_tiny
-  cpu_cycle_controller_tiny cpu_cycle_controller_tiny_i17 (
-    .clk( s19 ),
-    .rst_n( rst_n ),
+  cpu_cycle_controller_tiny cpu_cycle_controller_tiny_i16 (
+    .clk( Clk_in ),
+    .rst_n( rst_complex ),
     .fetch_done( Fetch_done ),
     .data_done( data_done ),
     .ld( ld ),
@@ -2804,29 +3118,29 @@ module tt_um_remedy_cpu (
     .dbg_halt_req( halt_req ),
     .dbg_run_req( run_req ),
     .dbg_step_req( step_req ),
-    .dbg_break_hit( s78 ),
-    .dbg_break_after_exec( s79 ),
+    .dbg_break_hit( s74 ),
+    .dbg_break_after_exec( s75 ),
     .fetch_req( fetch_request_pulse ),
     .execute_now_pulse( \execute-pulse  ),
     .dbg_halted( dbg_halted )
   );
   // memory_wait_controller_tiny
-  memory_wait_controller_tiny memory_wait_controller_tiny_i18 (
-    .clk( s19 ),
-    .rst_n( rst_n ),
+  memory_wait_controller_tiny memory_wait_controller_tiny_i17 (
+    .clk( Clk_in ),
+    .rst_n( rst_complex ),
     .fetch_req( fetch_request_pulse ),
-    .ld_req( s74 ),
-    .st_req( s75 ),
-    .flash_req( s77 ),
+    .ld_req( s70 ),
+    .st_req( s71 ),
+    .flash_req( s73 ),
     .fetch_addr( programAddr ),
-    .data_addr( s10 ),
-    .store_data( s1 ),
+    .data_addr( AddrOut ),
+    .store_data( DataOut ),
     .spi_data_out( spi_data ),
     .spi_busy( spi_busy_ram ),
     .mem_rdata( mem_out ),
     .fetch_done( Fetch_done ),
     .data_done( data_done ),
-    .mem_stall( s76 ),
+    .mem_stall( s72 ),
     .spi_st( spi_st ),
     .spi_ld( spi_ld ),
     .spi_addr( spi_addr ),
@@ -2834,12 +3148,12 @@ module tt_um_remedy_cpu (
     .spi_target( spi_target )
   );
   // debug_core_tiny
-  debug_core_tiny debug_core_tiny_i19 (
-    .clk( s19 ),
+  debug_core_tiny debug_core_tiny_i18 (
+    .clk( Clk_in ),
     .rst_n( rst_n ),
-    .reg_wr( s71 ),
-    .reg_addr( s72 ),
-    .reg_wdata( s73 ),
+    .reg_wr( s67 ),
+    .reg_addr( s68 ),
+    .reg_wdata( s69 ),
     .cpu_dbg_halted( dbg_halted ),
     .cpu_flags( flag_out ),
     .cpu_pc( programAddr ),
@@ -2852,107 +3166,134 @@ module tt_um_remedy_cpu (
     .dbg_run_req( run_req ),
     .dbg_step_req( step_req ),
     .static_break_enable( ststic_break_en ),
-    .dbg_break_hit( s78 ),
-    .dbg_break_after_exec( s79 )
+    .dbg_break_hit( s74 ),
+    .dbg_break_after_exec( s75 ),
+    .dbg_soft_reset_req( soft_reset_req ),
+    .dbg_jump_req( deb_jump_req ),
+    .dbg_jump_addr( deb_jump_addr )
   );
-  assign s36 = (intr & \execute-pulse );
-  assign outR[7:0] = uo_out_temp;
+  // qspi_memory_interface
+  qspi_memory_interface qspi_memory_interface_i19 (
+    .clk( Clk_in ),
+    .spi_rst_n( rst_complex ),
+    .st( spi_st ),
+    .ld( spi_ld ),
+    .spi_target( spi_target ),
+    .addr( spi_addr ),
+    .data_in( spi_data_out ),
+    .spi_data_in( qspi_data_in ),
+    .data_out( spi_data ),
+    .spi_clk( spi_clock ),
+    .spi_flash_cs( spics_flash ),
+    .spi_ram_cs( spics_ram ),
+    .spi_data_out( qspi_data_out ),
+    .spi_data_oe( qspi_data_oe ),
+    .busy( spi_busy_ram )
+  );
+  assign s42 = (rst_n & ~ soft_reset_req);
+  assign rst_complex = (rst_n & ~ soft_reset_req);
+  assign s33 = (intr & \execute-pulse );
+  assign outR[7:0] = outputToOutside;
   assign outR[15:8] = 8'b0;
-  assign s54[0] = s55;
-  assign s54[1] = s56;
-  assign s54[2] = i2c_inter;
-  Mux_2x1 Mux_2x1_i20 (
-    .sel( spi_target ),
-    .in_0( 1'b1 ),
-    .in_1( spi_cs ),
-    .out( spics_ram )
-  );
-  assign s63 = ~ spi_target;
-  assign flag_out[0] = s16;
-  assign flag_out[1] = s15;
-  assign flag_out[2] = s14;
-  assign pc_en = (~ s76 & \execute-pulse );
+  assign s51[0] = s52;
+  assign s51[1] = s53;
+  assign s51[2] = i2c_inter;
+  assign flag_out[0] = s14;
+  assign flag_out[1] = s13;
+  assign flag_out[2] = s12;
+  assign pc_en = (~ s72 & \execute-pulse );
   DIG_Add #(
     .Bits(16)
   )
-  DIG_Add_i21 (
+  DIG_Add_i20 (
     .a( programAddr ),
     .b( 16'b1 ),
     .c_i( 1'b0 ),
-    .s( s11 )
+    .s( s9 )
   );
-  assign uio_oe[0] = 1'b0;
-  assign uio_oe[1] = 1'b1;
-  assign uio_oe[2] = 1'b1;
+  assign uio_out[0] = spics_flash;
+  assign uio_out[1] = qspi_data_out[0];
+  assign uio_out[2] = qspi_data_out[1];
+  assign uio_out[3] = spi_clock;
+  assign uio_out[4] = qspi_data_out[2];
+  assign uio_out[5] = qspi_data_out[3];
+  assign uio_out[6] = spics_ram;
+  assign uio_out[7] = sda_o;
+  assign uio_oe[0] = 1'b1;
+  assign uio_oe[1] = qspi_data_oe[0];
+  assign uio_oe[2] = qspi_data_oe[1];
   assign uio_oe[3] = 1'b1;
-  assign uio_oe[4] = 1'b1;
-  assign uio_oe[5] = sda_oe;
-  assign uio_oe[6] = scl_oe;
-  assign uio_oe[7] = dbg_data_oe;
-  assign s7 = inst_reg[3:0];
-  assign s8 = inst_reg[7:4];
+  assign uio_oe[4] = qspi_data_oe[2];
+  assign uio_oe[5] = qspi_data_oe[3];
+  assign uio_oe[6] = 1'b1;
+  assign uio_oe[7] = sda_oe;
+  assign s6 = inst_reg[3:0];
+  assign s7 = inst_reg[7:4];
   assign OPcode = inst_reg[15:8];
-  assign s41 = s1[7:0];
-  assign s18 = inst_reg[7:0];
-  assign s58 = s1[8:0];
-  assign s57 = s1[7:0];
-  assign s53 = s1[3:0];
-  singExtend singExtend_i22 (
-    .inst( s18 ),
-    .\4S ( s3 ),
-    .\8SD ( s4 ),
-    .\4D ( s5 )
+  assign s38 = DataOut[7:0];
+  assign s16 = inst_reg[7:0];
+  assign s55 = DataOut[8:0];
+  assign s54 = DataOut[7:0];
+  assign s50 = DataOut[3:0];
+  assign s78 = outputToOutside[6];
+  assign s79 = outputToOutside[7];
+  singExtend singExtend_i21 (
+    .inst( s16 ),
+    .\4S ( s2 ),
+    .\8SD ( s3 ),
+    .\4D ( s4 )
+  );
+  Mux_2x1 Mux_2x1_i22 (
+    .sel( dbg_data_oe ),
+    .in_0( s79 ),
+    .in_1( dbg_data_out ),
+    .out( s77 )
   );
   Mux_2x1 Mux_2x1_i23 (
-    .sel( s63 ),
-    .in_0( 1'b1 ),
-    .in_1( spi_cs ),
-    .out( spics_flash )
+    .sel( scl_oe ),
+    .in_0( s78 ),
+    .in_1( scl_o ),
+    .out( s76 )
   );
-  assign s20 = OPcode[6:0];
+  assign s17 = OPcode[6:0];
   assign imm = OPcode[7];
   Mux_2x1_NBits #(
     .Bits(7)
   )
   Mux_2x1_NBits_i24 (
     .sel( imm ),
-    .in_0( s20 ),
+    .in_0( s17 ),
     .in_1( 7'b0 ),
-    .out( s21 )
+    .out( s18 )
   );
-  assign uio_out[0] = 1'b0;
-  assign uio_out[1] = spics_ram;
-  assign uio_out[2] = spics_flash;
-  assign uio_out[3] = spi_mosi_ram;
-  assign uio_out[4] = spi_clock_ram;
-  assign uio_out[5] = sda_o;
-  assign uio_out[6] = scl_o;
-  assign uio_out[7] = dbg_data_out;
+  assign uo_out[5:0] = outputToOutside[5:0];
+  assign uo_out[6] = s76;
+  assign uo_out[7] = s77;
   // opcode_microcode_rom
   opcode_microcode_rom opcode_microcode_rom_i25 (
-    .opcode( s21 ),
-    .muxb0( s24 ),
-    .muxb1( s23 ),
-    .muxb2( s22 ),
-    .aluop0( s30 ),
-    .aluop1( s29 ),
-    .aluop2( s28 ),
-    .aluop3( s27 ),
-    .aluop4( s26 ),
-    .aluop5( s25 ),
-    .WE( s49 ),
-    .sf( s50 ),
-    .iem0( s35 ),
-    .iem1( s34 ),
-    .br0( s33 ),
-    .br1( s32 ),
-    .br2( s31 ),
+    .opcode( s18 ),
+    .muxb0( s21 ),
+    .muxb1( s20 ),
+    .muxb2( s19 ),
+    .aluop0( s27 ),
+    .aluop1( s26 ),
+    .aluop2( s25 ),
+    .aluop3( s24 ),
+    .aluop4( s23 ),
+    .aluop5( s22 ),
+    .WE( s46 ),
+    .sf( s47 ),
+    .iem0( s32 ),
+    .iem1( s31 ),
+    .br0( s30 ),
+    .br1( s29 ),
+    .br2( s28 ),
     .muxA( muxA ),
     .ld( ld ),
     .st( st ),
     .abs( abs ),
-    .ioW( s51 ),
-    .ioR( s52 ),
+    .ioW( s48 ),
+    .ioR( s49 ),
     .stPC( stPC ),
     .Reti( Reti ),
     .flash_req( flash_req ),
@@ -2964,109 +3305,109 @@ module tt_um_remedy_cpu (
   Mux_2x1_NBits_i26 (
     .sel( muxA ),
     .in_0( s0 ),
-    .in_1( s1 ),
-    .out( s2 )
+    .in_1( DataOut ),
+    .out( s1 )
   );
-  assign muxB[0] = s22;
-  assign muxB[1] = s23;
-  assign muxB[2] = s24;
-  assign aluOp[0] = s25;
-  assign aluOp[1] = s26;
-  assign aluOp[2] = s27;
-  assign aluOp[3] = s28;
-  assign aluOp[4] = s29;
-  assign aluOp[5] = s30;
-  assign br[0] = s31;
-  assign br[1] = s32;
-  assign br[2] = s33;
-  assign iem[0] = s34;
-  assign iem[1] = s35;
-  assign s37 = (\execute-pulse  & Reti);
-  assign WE = (((~ flash_req | ~ ld) & \execute-pulse  & s49) | (s49 & data_done & (flash_req | ld)));
-  assign sf = (s50 & \execute-pulse );
-  assign s39 = (s51 & \execute-pulse );
-  assign s48 = (s52 & \execute-pulse );
-  assign s45 = (abs & \execute-pulse );
-  assign s47 = (flash_req | ld);
-  assign s74 = (ld & \execute-pulse );
-  assign s75 = (\execute-pulse  & st);
-  assign s77 = (\execute-pulse  & flash_req);
+  assign muxB[0] = s19;
+  assign muxB[1] = s20;
+  assign muxB[2] = s21;
+  assign aluOp[0] = s22;
+  assign aluOp[1] = s23;
+  assign aluOp[2] = s24;
+  assign aluOp[3] = s25;
+  assign aluOp[4] = s26;
+  assign aluOp[5] = s27;
+  assign br[0] = s28;
+  assign br[1] = s29;
+  assign br[2] = s30;
+  assign iem[0] = s31;
+  assign iem[1] = s32;
+  assign s34 = (\execute-pulse  & Reti);
+  assign WE = (((~ flash_req | ~ ld) & \execute-pulse  & s46) | (s46 & data_done & (flash_req | ld)));
+  assign sf = (s47 & \execute-pulse );
+  assign ioW = (s48 & \execute-pulse );
+  assign ioR = (s49 & \execute-pulse );
+  assign s43 = (abs & \execute-pulse );
+  assign s45 = (flash_req | ld);
+  assign s70 = (ld & \execute-pulse );
+  assign s71 = (\execute-pulse  & st);
+  assign s73 = (\execute-pulse  & flash_req);
   Mux_8x1_NBits #(
     .Bits(16)
   )
   Mux_8x1_NBits_i27 (
     .sel( muxB ),
-    .in_0( s1 ),
+    .in_0( DataOut ),
     .in_1( 16'b0 ),
     .in_2( ImmReg ),
     .in_3( 16'b0 ),
     .in_4( 16'b0 ),
-    .in_5( s3 ),
-    .in_6( s4 ),
-    .in_7( s5 ),
-    .out( s6 )
+    .in_5( s2 ),
+    .in_6( s3 ),
+    .in_7( s4 ),
+    .out( s5 )
   );
   // muxEncoder
   muxEncoder muxEncoder_i28 (
     .a( 1'b0 ),
-    .b( s47 ),
-    .c( s48 ),
+    .b( s45 ),
+    .c( ioR ),
     .d( stPC ),
-    .Q( s9 )
+    .Q( s8 )
   );
-  assign s13 = br[1:0];
+  assign s11 = br[1:0];
   Mux_4x1 Mux_4x1_i29 (
-    .sel( s13 ),
+    .sel( s11 ),
     .in_0( 1'b0 ),
-    .in_1( s14 ),
-    .in_2( s15 ),
-    .in_3( s16 ),
-    .out( s17 )
+    .in_1( s12 ),
+    .in_2( s13 ),
+    .in_3( s14 ),
+    .out( s15 )
   );
   // Alu
   Alu Alu_i30 (
-    .A( s2 ),
-    .B( s6 ),
-    .carryIn( s14 ),
+    .A( s1 ),
+    .B( s5 ),
+    .carryIn( s12 ),
     .AluOp( aluOp ),
-    .Out( s10 ),
-    .Neg( s42 ),
-    .Zero( s43 ),
-    .CarryOut( s44 )
+    .Out( AddrOut ),
+    .Neg( s39 ),
+    .Zero( s40 ),
+    .CarryOut( s41 )
   );
   Mux_4x1_NBits #(
     .Bits(16)
   )
   Mux_4x1_NBits_i31 (
-    .sel( s9 ),
-    .in_0( s10 ),
+    .sel( s8 ),
+    .in_0( AddrOut ),
     .in_1( mem_out ),
     .in_2( iow_Din ),
-    .in_3( s11 ),
-    .out( s12 )
+    .in_3( s9 ),
+    .out( s10 )
   );
+  assign s44 = ((s15 ^ br[2]) & \execute-pulse );
+  assign s57 = AddrOut[4:0];
+  assign s35 = AddrOut[4:0];
   CompUnsigned #(
-    .Bits(16)
+    .Bits(5)
   )
   CompUnsigned_i32 (
-    .a( s10 ),
-    .b( 16'b1 ),
-    .\= ( s38 )
+    .a( s35 ),
+    .b( 5'b1 ),
+    .\= ( s36 )
   );
-  assign s46 = ((s17 ^ br[2]) & \execute-pulse );
-  assign s61 = (s10[4] & s39);
-  assign s60 = s10[4:0];
-  assign s62 = s10[3:0];
-  assign s40 = (s38 & s39);
-  assign s64 = s60[0];
-  assign s65 = s60[1];
-  assign s66 = s60[2];
-  assign s67 = s60[3];
-  assign s68 = s60[4];
-  assign s69 = ~ s66;
-  assign s70 = ~ s65;
-  assign s59[0] = ((~ s68 & s69 & s70 & s64) | (s67 & s70 & s64) | (s67 & s69 & s70) | (s66 & s65));
-  assign s59[1] = (s68 | (~ s67 & s65) | (~ s67 & s66) | (s67 & s69 & s70));
-  assign s59[2] = (s68 | (s67 & s65 & s64) | (s67 & s66));
-  assign uo_out = uo_out_temp;
+  assign s58 = (s35[4] & ioW);
+  assign s59 = s35[3:0];
+  assign s60 = s57[0];
+  assign s61 = s57[1];
+  assign s62 = s57[2];
+  assign s63 = s57[3];
+  assign s64 = s57[4];
+  assign s37 = (s36 & ioW);
+  assign s65 = ~ s62;
+  assign s66 = ~ s61;
+  assign s56[0] = ((~ s64 & s65 & s66 & s60) | (s63 & s66 & s60) | (s63 & s65 & s66) | (s62 & s61));
+  assign s56[1] = (s64 | (~ s63 & s61) | (~ s63 & s62) | (s63 & s65 & s66));
+  assign s56[2] = (s64 | (s63 & s61 & s60) | (s63 & s62));
 endmodule
