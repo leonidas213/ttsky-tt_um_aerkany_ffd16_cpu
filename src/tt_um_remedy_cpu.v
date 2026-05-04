@@ -1934,19 +1934,13 @@ module qspi_memory_interface (
     // increase INIT_WAIT_BITS too.
     localparam integer INIT_CLK_HZ      = 50000000;
     localparam integer INIT_WAIT_BITS   = 22;
-`ifdef COCOTB_SIM_FAST_INIT
-    localparam [INIT_WAIT_BITS-1:0] INIT_POWER_WAIT_CYCLES      = 22'd82;
-    localparam [INIT_WAIT_BITS-1:0] INIT_RESET_WAIT_CYCLES      = 22'd82;
-    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_SR2_WAIT_CYCLES  = 22'd82;
-    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_CONT_WAIT_CYCLES = 22'd82;
-    localparam [INIT_WAIT_BITS-1:0] INIT_CMD_GAP_CYCLES         = 22'd82;
-`else
-    localparam [INIT_WAIT_BITS-1:0] INIT_POWER_WAIT_CYCLES      = (INIT_CLK_HZ / 1000) * 10;
-    localparam [INIT_WAIT_BITS-1:0] INIT_RESET_WAIT_CYCLES      = (INIT_CLK_HZ / 1000) * 2;
-    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_SR2_WAIT_CYCLES  = (INIT_CLK_HZ / 1000) * 40;
-    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_CONT_WAIT_CYCLES = (INIT_CLK_HZ / 1000) * 1;
-    localparam [INIT_WAIT_BITS-1:0] INIT_CMD_GAP_CYCLES         = (INIT_CLK_HZ / 1000000) * 5 + 4;
-`endif
+
+    localparam [INIT_WAIT_BITS-1:0] INIT_POWER_WAIT_CYCLES      = (INIT_CLK_HZ / 1000) * 10; // 10 ms
+    localparam [INIT_WAIT_BITS-1:0] INIT_RESET_WAIT_CYCLES      = (INIT_CLK_HZ / 1000) * 2;  //  2 ms
+    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_SR2_WAIT_CYCLES  = (INIT_CLK_HZ / 1000) * 40; // 40 ms
+    localparam [INIT_WAIT_BITS-1:0] INIT_FLASH_CONT_WAIT_CYCLES = (INIT_CLK_HZ / 1000) * 1;  //  1 ms
+    localparam [INIT_WAIT_BITS-1:0] INIT_CMD_GAP_CYCLES         = (INIT_CLK_HZ / 1000000) * 5 + 4; // >= about 5 us
+
     function [INIT_WAIT_BITS-1:0] init_gap_cycles;
         input [3:0] stp;
         begin
@@ -2812,44 +2806,42 @@ module tt_um_remedy_cpu (
   wire s40;
   wire s41;
   wire [7:0] outputToOutside;
-  wire s42;
   wire pc_en;
-  wire s43;
+  wire s42;
   wire [15:0] deb_jump_addr;
   wire deb_jump_req;
-  wire s44;
+  wire s43;
   wire [15:0] programAddr;
-  wire s45;
+  wire s44;
   wire ioR;
   wire stPC;
   wire [15:0] outR;
-  wire s46;
+  wire s45;
   wire WE;
   wire ld;
   wire data_done;
+  wire s46;
   wire s47;
   wire s48;
-  wire s49;
   wire Fetch_done;
   wire abs;
-  wire [3:0] s50;
-  wire rst_complex;
-  wire [2:0] s51;
+  wire [3:0] s49;
+  wire [2:0] s50;
   wire [15:0] intr_reg;
   wire InterLock;
+  wire s51;
   wire s52;
-  wire s53;
   wire i2c_inter;
-  wire [7:0] s54;
+  wire [7:0] s53;
   wire [15:0] rngdat0;
   wire [15:0] timerdat1;
-  wire [8:0] s55;
+  wire [8:0] s54;
   wire [15:0] timerdat2;
-  wire [2:0] s56;
+  wire [2:0] s55;
   wire [15:0] i2cDat;
-  wire [4:0] s57;
-  wire s58;
-  wire [3:0] s59;
+  wire [4:0] s56;
+  wire s57;
+  wire [3:0] s58;
   wire \sda-in ;
   wire sda_o;
   wire scl_o;
@@ -2858,32 +2850,32 @@ module tt_um_remedy_cpu (
   wire st;
   wire flash_req;
   wire Break;
+  wire s59;
   wire s60;
   wire s61;
   wire s62;
   wire s63;
   wire s64;
   wire s65;
-  wire s66;
   wire [2:0] flag_out;
   wire dbg_clk;
   wire dbg_data_in;
   wire [15:0] reg_rdata;
   wire dbg_data_out;
   wire dbg_data_oe;
-  wire s67;
-  wire [3:0] s68;
-  wire [15:0] s69;
+  wire s66;
+  wire [3:0] s67;
+  wire [15:0] s68;
+  wire s69;
   wire s70;
   wire s71;
   wire s72;
-  wire s73;
   wire dbg_en;
   wire halt_req;
   wire run_req;
   wire step_req;
+  wire s73;
   wire s74;
-  wire s75;
   wire fetch_request_pulse;
   wire dbg_halted;
   wire [15:0] spi_data;
@@ -2901,10 +2893,10 @@ module tt_um_remedy_cpu (
   wire [3:0] qspi_data_in;
   wire [3:0] qspi_data_out;
   wire [3:0] qspi_data_oe;
+  wire s75;
   wire s76;
   wire s77;
   wire s78;
-  wire s79;
   Mux_2x1 Mux_2x1_i0 (
     .sel( ena ),
     .in_0( 1'b1 ),
@@ -2973,14 +2965,14 @@ module tt_um_remedy_cpu (
   programCounter programCounter_i6 (
     .AluIn( AddrOut ),
     .clk( Clk_in ),
-    .rst_n( s42 ),
+    .rst_n( rst_n ),
     .pc_en( pc_en ),
-    .absJmp( s43 ),
+    .absJmp( s42 ),
     .intr( s33 ),
     .reti( s34 ),
     .deb_jump_addr( deb_jump_addr ),
     .deb_jump( deb_jump_req ),
-    .relJmp( s44 ),
+    .relJmp( s43 ),
     .PC( programAddr )
   );
   DIG_Register_BUS #(
@@ -2994,12 +2986,12 @@ module tt_um_remedy_cpu (
   );
   // interrupt_controller_small
   interrupt_controller_small interrupt_controller_small_i8 (
-    .dOut( s50 ),
+    .dOut( s49 ),
     .Addr( s35 ),
     .ioW( ioW ),
     .C( Clk_in ),
-    .rst_n( rst_complex ),
-    .irq_in( s51 ),
+    .rst_n( rst_n ),
+    .irq_in( s50 ),
     .imm( imm ),
     .reti( Reti ),
     .pc_en( pc_en ),
@@ -3013,7 +3005,7 @@ module tt_um_remedy_cpu (
   // lfsr_RandomNumberGen
   lfsr_RandomNumberGen lfsr_RandomNumberGen_i9 (
     .adrrIn( s35 ),
-    .dataIn( s54 ),
+    .dataIn( s53 ),
     .ioW( ioW ),
     .clk( Clk_in ),
     .SeedAdr( 5'b1011 ),
@@ -3034,11 +3026,11 @@ module tt_um_remedy_cpu (
     .timerSyncStartAddr( 5'b1010 ),
     .rst_n( rst_n ),
     .TimerOut( timerdat1 ),
-    .timer_interrupt( s52 )
+    .timer_interrupt( s51 )
   );
   // timer_tiny
   timer_tiny timer_tiny_i11 (
-    .dOut( s55 ),
+    .dOut( s54 ),
     .Addr( s35 ),
     .ioW( ioW ),
     .C( Clk_in ),
@@ -3050,7 +3042,7 @@ module tt_um_remedy_cpu (
     .timerSyncStartAddr( 5'b1010 ),
     .rst_n( rst_n ),
     .TimerOut( timerdat2 ),
-    .timer_interrupt( s53 )
+    .timer_interrupt( s52 )
   );
   // RegisterBlock
   RegisterBlock RegisterBlock_i12 (
@@ -3066,7 +3058,7 @@ module tt_um_remedy_cpu (
     .Bits(16)
   )
   Mux_8x1_NBits_i13 (
-    .sel( s56 ),
+    .sel( s55 ),
     .in_0( inputReg ),
     .in_1( outR ),
     .in_2( timerdat1 ),
@@ -3081,8 +3073,8 @@ module tt_um_remedy_cpu (
   i2c_master_ctrl i2c_master_ctrl_i14 (
     .clk( Clk_in ),
     .rst_n( rst_n ),
-    .wr_en( s58 ),
-    .reg_addr( s59 ),
+    .wr_en( s57 ),
+    .reg_addr( s58 ),
     .cpu_din( DataOut ),
     .sda_in( \sda-in  ),
     .cpu_dout( i2cDat ),
@@ -3101,14 +3093,14 @@ module tt_um_remedy_cpu (
     .reg_rdata( reg_rdata ),
     .dbg_data_out( dbg_data_out ),
     .dbg_data_oe( dbg_data_oe ),
-    .reg_wr( s67 ),
-    .reg_addr( s68 ),
-    .reg_wdata( s69 )
+    .reg_wr( s66 ),
+    .reg_addr( s67 ),
+    .reg_wdata( s68 )
   );
   // cpu_cycle_controller_tiny
   cpu_cycle_controller_tiny cpu_cycle_controller_tiny_i16 (
     .clk( Clk_in ),
-    .rst_n( rst_complex ),
+    .rst_n( rst_n ),
     .fetch_done( Fetch_done ),
     .data_done( data_done ),
     .ld( ld ),
@@ -3118,8 +3110,8 @@ module tt_um_remedy_cpu (
     .dbg_halt_req( halt_req ),
     .dbg_run_req( run_req ),
     .dbg_step_req( step_req ),
-    .dbg_break_hit( s74 ),
-    .dbg_break_after_exec( s75 ),
+    .dbg_break_hit( s73 ),
+    .dbg_break_after_exec( s74 ),
     .fetch_req( fetch_request_pulse ),
     .execute_now_pulse( \execute-pulse  ),
     .dbg_halted( dbg_halted )
@@ -3127,11 +3119,11 @@ module tt_um_remedy_cpu (
   // memory_wait_controller_tiny
   memory_wait_controller_tiny memory_wait_controller_tiny_i17 (
     .clk( Clk_in ),
-    .rst_n( rst_complex ),
+    .rst_n( rst_n ),
     .fetch_req( fetch_request_pulse ),
-    .ld_req( s70 ),
-    .st_req( s71 ),
-    .flash_req( s73 ),
+    .ld_req( s69 ),
+    .st_req( s70 ),
+    .flash_req( s72 ),
     .fetch_addr( programAddr ),
     .data_addr( AddrOut ),
     .store_data( DataOut ),
@@ -3140,7 +3132,7 @@ module tt_um_remedy_cpu (
     .mem_rdata( mem_out ),
     .fetch_done( Fetch_done ),
     .data_done( data_done ),
-    .mem_stall( s72 ),
+    .mem_stall( s71 ),
     .spi_st( spi_st ),
     .spi_ld( spi_ld ),
     .spi_addr( spi_addr ),
@@ -3151,9 +3143,9 @@ module tt_um_remedy_cpu (
   debug_core_tiny debug_core_tiny_i18 (
     .clk( Clk_in ),
     .rst_n( rst_n ),
-    .reg_wr( s67 ),
-    .reg_addr( s68 ),
-    .reg_wdata( s69 ),
+    .reg_wr( s66 ),
+    .reg_addr( s67 ),
+    .reg_wdata( s68 ),
     .cpu_dbg_halted( dbg_halted ),
     .cpu_flags( flag_out ),
     .cpu_pc( programAddr ),
@@ -3166,8 +3158,8 @@ module tt_um_remedy_cpu (
     .dbg_run_req( run_req ),
     .dbg_step_req( step_req ),
     .static_break_enable( ststic_break_en ),
-    .dbg_break_hit( s74 ),
-    .dbg_break_after_exec( s75 ),
+    .dbg_break_hit( s73 ),
+    .dbg_break_after_exec( s74 ),
     .dbg_soft_reset_req( soft_reset_req ),
     .dbg_jump_req( deb_jump_req ),
     .dbg_jump_addr( deb_jump_addr )
@@ -3175,7 +3167,7 @@ module tt_um_remedy_cpu (
   // qspi_memory_interface
   qspi_memory_interface qspi_memory_interface_i19 (
     .clk( Clk_in ),
-    .spi_rst_n( rst_complex ),
+    .spi_rst_n( rst_n ),
     .st( spi_st ),
     .ld( spi_ld ),
     .spi_target( spi_target ),
@@ -3190,18 +3182,16 @@ module tt_um_remedy_cpu (
     .spi_data_oe( qspi_data_oe ),
     .busy( spi_busy_ram )
   );
-  assign s42 = (rst_n & ~ soft_reset_req);
-  assign rst_complex = (rst_n & ~ soft_reset_req);
   assign s33 = (intr & \execute-pulse );
   assign outR[7:0] = outputToOutside;
   assign outR[15:8] = 8'b0;
-  assign s51[0] = s52;
-  assign s51[1] = s53;
-  assign s51[2] = i2c_inter;
+  assign s50[0] = s51;
+  assign s50[1] = s52;
+  assign s50[2] = i2c_inter;
   assign flag_out[0] = s14;
   assign flag_out[1] = s13;
   assign flag_out[2] = s12;
-  assign pc_en = (~ s72 & \execute-pulse );
+  assign pc_en = (~ s71 & \execute-pulse );
   DIG_Add #(
     .Bits(16)
   )
@@ -3232,11 +3222,11 @@ module tt_um_remedy_cpu (
   assign OPcode = inst_reg[15:8];
   assign s38 = DataOut[7:0];
   assign s16 = inst_reg[7:0];
-  assign s55 = DataOut[8:0];
-  assign s54 = DataOut[7:0];
-  assign s50 = DataOut[3:0];
-  assign s78 = outputToOutside[6];
-  assign s79 = outputToOutside[7];
+  assign s54 = DataOut[8:0];
+  assign s53 = DataOut[7:0];
+  assign s49 = DataOut[3:0];
+  assign s77 = outputToOutside[6];
+  assign s78 = outputToOutside[7];
   singExtend singExtend_i21 (
     .inst( s16 ),
     .\4S ( s2 ),
@@ -3245,15 +3235,15 @@ module tt_um_remedy_cpu (
   );
   Mux_2x1 Mux_2x1_i22 (
     .sel( dbg_data_oe ),
-    .in_0( s79 ),
+    .in_0( s78 ),
     .in_1( dbg_data_out ),
-    .out( s77 )
+    .out( s76 )
   );
   Mux_2x1 Mux_2x1_i23 (
     .sel( scl_oe ),
-    .in_0( s78 ),
+    .in_0( s77 ),
     .in_1( scl_o ),
-    .out( s76 )
+    .out( s75 )
   );
   assign s17 = OPcode[6:0];
   assign imm = OPcode[7];
@@ -3267,8 +3257,8 @@ module tt_um_remedy_cpu (
     .out( s18 )
   );
   assign uo_out[5:0] = outputToOutside[5:0];
-  assign uo_out[6] = s76;
-  assign uo_out[7] = s77;
+  assign uo_out[6] = s75;
+  assign uo_out[7] = s76;
   // opcode_microcode_rom
   opcode_microcode_rom opcode_microcode_rom_i25 (
     .opcode( s18 ),
@@ -3281,8 +3271,8 @@ module tt_um_remedy_cpu (
     .aluop3( s24 ),
     .aluop4( s23 ),
     .aluop5( s22 ),
-    .WE( s46 ),
-    .sf( s47 ),
+    .WE( s45 ),
+    .sf( s46 ),
     .iem0( s32 ),
     .iem1( s31 ),
     .br0( s30 ),
@@ -3292,8 +3282,8 @@ module tt_um_remedy_cpu (
     .ld( ld ),
     .st( st ),
     .abs( abs ),
-    .ioW( s48 ),
-    .ioR( s49 ),
+    .ioW( s47 ),
+    .ioR( s48 ),
     .stPC( stPC ),
     .Reti( Reti ),
     .flash_req( flash_req ),
@@ -3323,15 +3313,15 @@ module tt_um_remedy_cpu (
   assign iem[0] = s31;
   assign iem[1] = s32;
   assign s34 = (\execute-pulse  & Reti);
-  assign WE = (((~ flash_req | ~ ld) & \execute-pulse  & s46) | (s46 & data_done & (flash_req | ld)));
-  assign sf = (s47 & \execute-pulse );
-  assign ioW = (s48 & \execute-pulse );
-  assign ioR = (s49 & \execute-pulse );
-  assign s43 = (abs & \execute-pulse );
-  assign s45 = (flash_req | ld);
-  assign s70 = (ld & \execute-pulse );
-  assign s71 = (\execute-pulse  & st);
-  assign s73 = (\execute-pulse  & flash_req);
+  assign WE = (((~ flash_req | ~ ld) & \execute-pulse  & s45) | (s45 & data_done & (flash_req | ld)));
+  assign sf = (s46 & \execute-pulse );
+  assign ioW = (s47 & \execute-pulse );
+  assign ioR = (s48 & \execute-pulse );
+  assign s42 = (abs & \execute-pulse );
+  assign s44 = (flash_req | ld);
+  assign s69 = (ld & \execute-pulse );
+  assign s70 = (\execute-pulse  & st);
+  assign s72 = (\execute-pulse  & flash_req);
   Mux_8x1_NBits #(
     .Bits(16)
   )
@@ -3350,7 +3340,7 @@ module tt_um_remedy_cpu (
   // muxEncoder
   muxEncoder muxEncoder_i28 (
     .a( 1'b0 ),
-    .b( s45 ),
+    .b( s44 ),
     .c( ioR ),
     .d( stPC ),
     .Q( s8 )
@@ -3386,8 +3376,8 @@ module tt_um_remedy_cpu (
     .in_3( s9 ),
     .out( s10 )
   );
-  assign s44 = ((s15 ^ br[2]) & \execute-pulse );
-  assign s57 = AddrOut[4:0];
+  assign s43 = ((s15 ^ br[2]) & \execute-pulse );
+  assign s56 = AddrOut[4:0];
   assign s35 = AddrOut[4:0];
   CompUnsigned #(
     .Bits(5)
@@ -3397,17 +3387,17 @@ module tt_um_remedy_cpu (
     .b( 5'b1 ),
     .\= ( s36 )
   );
-  assign s58 = (s35[4] & ioW);
-  assign s59 = s35[3:0];
-  assign s60 = s57[0];
-  assign s61 = s57[1];
-  assign s62 = s57[2];
-  assign s63 = s57[3];
-  assign s64 = s57[4];
+  assign s57 = (s35[4] & ioW);
+  assign s58 = s35[3:0];
+  assign s59 = s56[0];
+  assign s60 = s56[1];
+  assign s61 = s56[2];
+  assign s62 = s56[3];
+  assign s63 = s56[4];
   assign s37 = (s36 & ioW);
-  assign s65 = ~ s62;
-  assign s66 = ~ s61;
-  assign s56[0] = ((~ s64 & s65 & s66 & s60) | (s63 & s66 & s60) | (s63 & s65 & s66) | (s62 & s61));
-  assign s56[1] = (s64 | (~ s63 & s61) | (~ s63 & s62) | (s63 & s65 & s66));
-  assign s56[2] = (s64 | (s63 & s61 & s60) | (s63 & s62));
+  assign s64 = ~ s61;
+  assign s65 = ~ s60;
+  assign s55[0] = ((~ s63 & s64 & s65 & s59) | (s62 & s65 & s59) | (s62 & s64 & s65) | (s61 & s60));
+  assign s55[1] = (s63 | (~ s62 & s60) | (~ s62 & s61) | (s62 & s64 & s65));
+  assign s55[2] = (s63 | (s62 & s60 & s59) | (s62 & s61));
 endmodule
