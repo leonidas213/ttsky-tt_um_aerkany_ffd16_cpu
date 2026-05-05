@@ -391,132 +391,6 @@ module lfsr_RandomNumberGen (
                            16'h0000;
 
 endmodule
-module timer (
-    input  [15:0] dOut,
-    input  [4:0] Addr,
-    input         ioW,
-    input         C,
-    input         InterLock,
-    input  [4:0] timerConfigAddr,
-    input  [4:0] timerTargetAddr,
-    input  [4:0] timerResetAddr,
-    input  [4:0] timerReadAddr,
-    input  [4:0] timerSyncStartAddr,
-    input         rst_n,
-    output [15:0] TimerOut,
-    output        timer_interrupt
-  );
-
-  reg [15:0] target       ;
-  reg [15:0] count        ;
-  reg [10:0] prescale_cnt ;
-  reg [6:0]  conf         ;
-
-  wire wr_conf   = ioW && (Addr == timerConfigAddr);
-  wire wr_target = ioW && (Addr == timerTargetAddr);
-  wire wr_reset  = ioW && (Addr == timerResetAddr) && dOut[0];
-  wire wr_sync_start = ioW && (Addr == timerSyncStartAddr);
-
-  wire rd_count  =  (Addr == timerReadAddr);
-  wire rd_target =  (Addr == timerTargetAddr);
-  wire rd_conf   =  (Addr == timerConfigAddr);
-
-  wire       timer_en     = conf[0];
-  wire [3:0] prescaler    = conf[4:1];
-  wire       auto_reload  = conf[5];
-  wire       irq_en       = conf[6];
-  wire       target_valid = (target != 16'h0000);
-  wire       matched      = target_valid && (count == target);
-
-  reg tick;
-  always @(*)
-  begin
-    case (prescaler)
-      4'd0:
-        tick = 1'b1;                  // /1
-      4'd1:
-        tick = prescale_cnt[0];       // /2
-      4'd2:
-        tick = &prescale_cnt[1:0];    // /4
-      4'd3:
-        tick = &prescale_cnt[2:0];    // /8
-      4'd4:
-        tick = &prescale_cnt[3:0];    // /16
-      4'd5:
-        tick = &prescale_cnt[4:0];    // /32
-      4'd6:
-        tick = &prescale_cnt[5:0];    // /64
-      4'd7:
-        tick = &prescale_cnt[6:0];    // /128
-      4'd8:
-        tick = &prescale_cnt[7:0];    // /256
-      4'd9:
-        tick = &prescale_cnt[8:0];    // /512
-      4'd10:
-        tick = &prescale_cnt[9:0];    // /1024
-      default:
-        tick = 1'b1;
-    endcase
-  end
-
-  always @(posedge C or negedge rst_n)
-  begin
-    if (!rst_n)
-    begin
-      target       <= 16'h0000;
-      count        <= 16'h0000;
-      prescale_cnt <= 11'h000;
-      conf         <= 7'h00;
-    end
-    else
-    begin
-      if (wr_conf)
-      begin
-        conf         <= dOut[6:0];
-        prescale_cnt <= 11'h000;
-      end
-
-      if (wr_target)
-        target <= dOut;
-
-      if (wr_sync_start)
-        conf[0] <= dOut[0];
-
-      if (wr_reset)
-      begin
-        count        <= 16'h0000;
-        conf         <=7'h00;
-      end
-      else
-      begin
-        if (timer_en)
-          prescale_cnt <= prescale_cnt + 11'd1;
-
-        if (timer_en && !InterLock)
-        begin
-          if (matched)
-          begin
-            if (auto_reload)
-              count <= 16'h0000;
-          end
-          else if (tick)
-          begin
-            count <= count + 16'd1;
-          end
-        end
-      end
-    end
-  end
-
-  assign TimerOut = rd_count  ? count             :
-         rd_target ? target            :
-         rd_conf   ? {9'h000, conf}   :
-         16'h0000;
-
-  assign timer_interrupt = irq_en && !InterLock && matched;
-
-endmodule
-
 module timer_tiny (
     input  [8:0] dOut,
     input  [4:0] Addr,
@@ -2821,14 +2695,15 @@ module tt_um_remedy_cpu (
   wire i2c_inter;
   wire [7:0] s51;
   wire [15:0] rngdat0;
-  wire [15:0] timerdat1;
   wire [8:0] s52;
+  wire [15:0] timerdat1;
+  wire [8:0] s53;
   wire [15:0] timerdat2;
-  wire [2:0] s53;
+  wire [2:0] s54;
   wire [15:0] i2cDat;
-  wire [4:0] s54;
-  wire s55;
-  wire [3:0] s56;
+  wire [4:0] s55;
+  wire s56;
+  wire [3:0] s57;
   wire \sda-in ;
   wire sda_o;
   wire scl_o;
@@ -2837,32 +2712,32 @@ module tt_um_remedy_cpu (
   wire st;
   wire flash_req;
   wire Break;
-  wire s57;
   wire s58;
   wire s59;
   wire s60;
   wire s61;
   wire s62;
   wire s63;
+  wire s64;
   wire [2:0] flag_out;
   wire dbg_clk;
   wire dbg_data_in;
   wire [15:0] reg_rdata;
   wire dbg_data_out;
   wire dbg_data_oe;
-  wire s64;
-  wire [3:0] s65;
-  wire [15:0] s66;
-  wire s67;
+  wire s65;
+  wire [3:0] s66;
+  wire [15:0] s67;
   wire s68;
   wire s69;
   wire s70;
+  wire s71;
   wire dbg_en;
   wire halt_req;
   wire run_req;
   wire step_req;
-  wire s71;
   wire s72;
+  wire s73;
   wire fetch_request_pulse;
   wire dbg_halted;
   wire [15:0] spi_data;
@@ -2879,10 +2754,10 @@ module tt_um_remedy_cpu (
   wire [3:0] qspi_data_in;
   wire [3:0] qspi_data_out;
   wire [3:0] qspi_data_oe;
-  wire s73;
   wire s74;
   wire s75;
   wire s76;
+  wire s77;
   Mux_2x1 Mux_2x1_i0 (
     .sel( ena ),
     .in_0( 1'b1 ),
@@ -2998,9 +2873,9 @@ module tt_um_remedy_cpu (
     .RngAdr( 5'b1100 ),
     .Out( rngdat0 )
   );
-  // timer
-  timer timer_i10 (
-    .dOut( DataOut ),
+  // timer_tiny
+  timer_tiny timer_tiny_i10 (
+    .dOut( s52 ),
     .Addr( s34 ),
     .ioW( ioW ),
     .C( Clk_in ),
@@ -3016,7 +2891,7 @@ module tt_um_remedy_cpu (
   );
   // timer_tiny
   timer_tiny timer_tiny_i11 (
-    .dOut( s52 ),
+    .dOut( s53 ),
     .Addr( s34 ),
     .ioW( ioW ),
     .C( \execute-pulse  ),
@@ -3044,7 +2919,7 @@ module tt_um_remedy_cpu (
     .Bits(16)
   )
   Mux_8x1_NBits_i13 (
-    .sel( s53 ),
+    .sel( s54 ),
     .in_0( inputReg ),
     .in_1( outR ),
     .in_2( timerdat1 ),
@@ -3059,8 +2934,8 @@ module tt_um_remedy_cpu (
   i2c_master_ctrl i2c_master_ctrl_i14 (
     .clk( Clk_in ),
     .rst_n( rst_n ),
-    .wr_en( s55 ),
-    .reg_addr( s56 ),
+    .wr_en( s56 ),
+    .reg_addr( s57 ),
     .cpu_din( DataOut ),
     .sda_in( \sda-in  ),
     .cpu_dout( i2cDat ),
@@ -3079,9 +2954,9 @@ module tt_um_remedy_cpu (
     .reg_rdata( reg_rdata ),
     .dbg_data_out( dbg_data_out ),
     .dbg_data_oe( dbg_data_oe ),
-    .reg_wr( s64 ),
-    .reg_addr( s65 ),
-    .reg_wdata( s66 )
+    .reg_wr( s65 ),
+    .reg_addr( s66 ),
+    .reg_wdata( s67 )
   );
   // cpu_cycle_controller_tiny
   cpu_cycle_controller_tiny cpu_cycle_controller_tiny_i16 (
@@ -3096,8 +2971,8 @@ module tt_um_remedy_cpu (
     .dbg_halt_req( halt_req ),
     .dbg_run_req( run_req ),
     .dbg_step_req( step_req ),
-    .dbg_break_hit( s71 ),
-    .dbg_break_after_exec( s72 ),
+    .dbg_break_hit( s72 ),
+    .dbg_break_after_exec( s73 ),
     .fetch_req( fetch_request_pulse ),
     .execute_now_pulse( \execute-pulse  ),
     .dbg_halted( dbg_halted )
@@ -3107,9 +2982,9 @@ module tt_um_remedy_cpu (
     .clk( Clk_in ),
     .rst_n( rst_n ),
     .fetch_req( fetch_request_pulse ),
-    .ld_req( s67 ),
-    .st_req( s68 ),
-    .flash_req( s70 ),
+    .ld_req( s68 ),
+    .st_req( s69 ),
+    .flash_req( s71 ),
     .fetch_addr( programAddr ),
     .data_addr( AddrOut ),
     .store_data( DataOut ),
@@ -3118,7 +2993,7 @@ module tt_um_remedy_cpu (
     .mem_rdata( mem_out ),
     .fetch_done( Fetch_done ),
     .data_done( data_done ),
-    .mem_stall( s69 ),
+    .mem_stall( s70 ),
     .spi_st( spi_st ),
     .spi_ld( spi_ld ),
     .spi_addr( spi_addr ),
@@ -3129,9 +3004,9 @@ module tt_um_remedy_cpu (
   debug_core_tiny debug_core_tiny_i18 (
     .clk( Clk_in ),
     .rst_n( rst_n ),
-    .reg_wr( s64 ),
-    .reg_addr( s65 ),
-    .reg_wdata( s66 ),
+    .reg_wr( s65 ),
+    .reg_addr( s66 ),
+    .reg_wdata( s67 ),
     .cpu_dbg_halted( dbg_halted ),
     .cpu_flags( flag_out ),
     .cpu_pc( programAddr ),
@@ -3144,8 +3019,8 @@ module tt_um_remedy_cpu (
     .dbg_run_req( run_req ),
     .dbg_step_req( step_req ),
     .static_break_enable( ststic_break_en ),
-    .dbg_break_hit( s71 ),
-    .dbg_break_after_exec( s72 ),
+    .dbg_break_hit( s72 ),
+    .dbg_break_after_exec( s73 ),
     .dbg_jump_req( deb_jump_req ),
     .dbg_jump_addr( deb_jump_addr )
   );
@@ -3176,7 +3051,7 @@ module tt_um_remedy_cpu (
   assign flag_out[0] = s14;
   assign flag_out[1] = s13;
   assign flag_out[2] = s12;
-  assign pc_en = (~ s69 & \execute-pulse );
+  assign pc_en = (~ s70 & \execute-pulse );
   DIG_Add #(
     .Bits(16)
   )
@@ -3207,11 +3082,12 @@ module tt_um_remedy_cpu (
   assign OPcode = inst_reg[15:8];
   assign s37 = DataOut[7:0];
   assign s16 = inst_reg[7:0];
-  assign s52 = DataOut[8:0];
+  assign s53 = DataOut[8:0];
   assign s51 = DataOut[7:0];
   assign s47 = DataOut[3:0];
-  assign s75 = outputToOutside[6];
-  assign s76 = outputToOutside[7];
+  assign s76 = outputToOutside[6];
+  assign s77 = outputToOutside[7];
+  assign s52 = DataOut[8:0];
   singExtend singExtend_i21 (
     .inst( s16 ),
     .\4S ( s2 ),
@@ -3220,15 +3096,15 @@ module tt_um_remedy_cpu (
   );
   Mux_2x1 Mux_2x1_i22 (
     .sel( dbg_data_oe ),
-    .in_0( s76 ),
+    .in_0( s77 ),
     .in_1( dbg_data_out ),
-    .out( s74 )
+    .out( s75 )
   );
   Mux_2x1 Mux_2x1_i23 (
     .sel( scl_oe ),
-    .in_0( s75 ),
+    .in_0( s76 ),
     .in_1( scl_o ),
-    .out( s73 )
+    .out( s74 )
   );
   assign s17 = OPcode[6:0];
   assign imm = OPcode[7];
@@ -3242,8 +3118,8 @@ module tt_um_remedy_cpu (
     .out( s18 )
   );
   assign uo_out[5:0] = outputToOutside[5:0];
-  assign uo_out[6] = s73;
-  assign uo_out[7] = s74;
+  assign uo_out[6] = s74;
+  assign uo_out[7] = s75;
   // opcode_microcode_rom
   opcode_microcode_rom opcode_microcode_rom_i25 (
     .opcode( s18 ),
@@ -3301,9 +3177,9 @@ module tt_um_remedy_cpu (
   assign ioW = (s46 & \execute-pulse );
   assign s41 = (abs & \execute-pulse );
   assign s43 = (flash_req | ld);
-  assign s67 = (ld & \execute-pulse );
-  assign s68 = (\execute-pulse  & st);
-  assign s70 = (\execute-pulse  & flash_req);
+  assign s68 = (ld & \execute-pulse );
+  assign s69 = (\execute-pulse  & st);
+  assign s71 = (\execute-pulse  & flash_req);
   Mux_8x1_NBits #(
     .Bits(16)
   )
@@ -3359,7 +3235,7 @@ module tt_um_remedy_cpu (
     .out( s10 )
   );
   assign s42 = ((s15 ^ br[2]) & \execute-pulse );
-  assign s54 = AddrOut[4:0];
+  assign s55 = AddrOut[4:0];
   assign s34 = AddrOut[4:0];
   CompUnsigned #(
     .Bits(5)
@@ -3369,17 +3245,17 @@ module tt_um_remedy_cpu (
     .b( 5'b1 ),
     .\= ( s35 )
   );
-  assign s55 = (s34[4] & ioW);
-  assign s56 = s34[3:0];
-  assign s57 = s54[0];
-  assign s58 = s54[1];
-  assign s59 = s54[2];
-  assign s60 = s54[3];
-  assign s61 = s54[4];
+  assign s56 = (s34[4] & ioW);
+  assign s57 = s34[3:0];
+  assign s58 = s55[0];
+  assign s59 = s55[1];
+  assign s60 = s55[2];
+  assign s61 = s55[3];
+  assign s62 = s55[4];
   assign s36 = (s35 & ioW);
-  assign s62 = ~ s59;
-  assign s63 = ~ s58;
-  assign s53[0] = ((~ s61 & s62 & s63 & s57) | (s60 & s63 & s57) | (s60 & s62 & s63) | (s59 & s58));
-  assign s53[1] = (s61 | (~ s60 & s58) | (~ s60 & s59) | (s60 & s62 & s63));
-  assign s53[2] = (s61 | (s60 & s58 & s57) | (s60 & s59));
+  assign s63 = ~ s60;
+  assign s64 = ~ s59;
+  assign s54[0] = ((~ s62 & s63 & s64 & s58) | (s61 & s64 & s58) | (s61 & s63 & s64) | (s60 & s59));
+  assign s54[1] = (s62 | (~ s61 & s59) | (~ s61 & s60) | (s61 & s63 & s64));
+  assign s54[2] = (s62 | (s61 & s59 & s58) | (s61 & s60));
 endmodule
