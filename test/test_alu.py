@@ -40,7 +40,7 @@ async def test_cpu_add_val(dut):
     dut._log.info("Started flash and ram")
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 7)
+    await wait_execute_steps(dut, 9)
 
     cocotb.log.info("ADD for uo_out is %d", (dut.uo_out.value))
     assert dut.uo_out.value == 7, f"Expected 7 but got {dut.uo_out.value}"

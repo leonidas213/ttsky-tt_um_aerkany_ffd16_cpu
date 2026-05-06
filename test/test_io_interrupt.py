@@ -133,7 +133,7 @@ async def test_cpu_timer1_interrupt_basic(dut):
     # 1e:0 |    f | 3f d2       ; out CpuinterruptEnable, r2
     # 20:0 |   10 | 0a 21       ; ldi r2, 0b0001
     # 22:0 |   11 | 3f e2       ; out InputInterruptEnable, r2
-    # 24:0 |   12 | 81 ff 09 20 ; ldi r2, 0x1ff
+    # 24:0 |   12 | 81 ff 09 20 ; ldi r2, 0x01f
     # 28:0 |   14 | 3f 32       ; out timer1Target, r2
     # 2a:0 |   15 | 80 41 09 20 ; ldi r2, 0b1000001
     # 2e:0 |   17 | 3f 22       ; out timer1Config, r2
@@ -158,7 +158,7 @@ async def test_cpu_timer1_interrupt_basic(dut):
     flash.poke16w(0x000F, 0x3FD2)
     flash.poke16w(0x0010, 0x0A21)
     flash.poke16w(0x0011, 0x3FE2)
-    flash.poke16w(0x0012, 0x81FF)
+    flash.poke16w(0x0012, 0x801F)
     flash.poke16w(0x0013, 0x0920)
     flash.poke16w(0x0014, 0x3F32)
     flash.poke16w(0x0015, 0x8041)
