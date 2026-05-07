@@ -235,13 +235,13 @@ async def test_cpu_flash_read(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9, flash)
+    await wait_execute_steps(dut, 8, flash)
     assert dut.uo_out.value == 0x2F, f"Expected 0x2F but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5, flash)
+    await wait_execute_steps(dut, 4, flash)
     assert dut.uo_out.value == 0x13, f"Expected 0x13 but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5, flash)
+    await wait_execute_steps(dut, 4, flash)
     assert dut.uo_out.value == 0xB2, f"Expected 0xB2 but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5, flash)
+    await wait_execute_steps(dut, 4, flash)
     assert dut.uo_out.value == 0xA4, f"Expected 0xA4 but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5, flash)
+    await wait_execute_steps(dut, 4, flash)
     assert dut.uo_out.value == 0x2F, f"Expected 0x2F but got {dut.uo_out.value}"
