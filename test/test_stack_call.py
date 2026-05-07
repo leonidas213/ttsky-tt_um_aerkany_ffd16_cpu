@@ -38,7 +38,7 @@ async def test_cpu_rcall_rret(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 14)
+    await wait_execute_steps(dut, 14, flash)
     assert dut.uo_out.value == 11, f"Expected 11 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -80,7 +80,7 @@ async def test_cpu_push_pop_basic(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 15)
+    await wait_execute_steps(dut, 15, flash)
     assert dut.uo_out.value == 0x34, f"Expected 0x34 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -133,7 +133,7 @@ async def test_cpu_push_pop_lifo(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 25)
+    await wait_execute_steps(dut, 25, flash)
     assert dut.uo_out.value == 0x22, f"Expected 0x22 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -183,7 +183,7 @@ async def test_cpu_push_pop_lifo_second_value(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 25)
+    await wait_execute_steps(dut, 25, flash)
     assert dut.uo_out.value == 0x11, f"Expected 0x11 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -220,7 +220,7 @@ async def test_cpu_rcall_rret_basic(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 14)
+    await wait_execute_steps(dut, 14, flash)
     assert dut.uo_out.value == 0x55, f"Expected 0x55 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -266,7 +266,7 @@ async def test_cpu_call_macro_basic(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 17)
+    await wait_execute_steps(dut, 17, flash)
     assert dut.uo_out.value == 0x66, f"Expected 0x66 but got {dut.uo_out.value}"
 
 async def test_cpu_call_ret_cleanup(dut):
@@ -319,7 +319,7 @@ async def test_cpu_call_ret_cleanup(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 15)
+    await wait_execute_steps(dut, 15, flash)
     assert dut.uo_out.value == 0x44, f"Expected 0x44 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -374,7 +374,7 @@ async def test_cpu_enter_leave_basic(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 25)
+    await wait_execute_steps(dut, 25, flash)
     assert dut.uo_out.value == 0x21, f"Expected 0x21 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -437,7 +437,7 @@ async def test_cpu_bp_local_access_style(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 36)
+    await wait_execute_steps(dut, 36, flash)
     assert dut.uo_out.value == 0x5A, f"Expected 0x5A but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -481,7 +481,7 @@ async def test_cpu_scall_macro(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 20)
+    await wait_execute_steps(dut, 20, flash)
     assert dut.uo_out.value == 0x2B, f"Expected 0x2B but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -518,6 +518,6 @@ async def test_cpu_push_writes_stack_memory(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 12)
+    await wait_execute_steps(dut, 12, flash)
 
     assert dut.uo_out.value == 0x4D, f"Expected 0x4D but got {dut.uo_out.value}"

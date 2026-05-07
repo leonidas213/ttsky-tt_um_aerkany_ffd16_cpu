@@ -46,7 +46,7 @@ async def test_cpu_cmp_jumpzero(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     assert dut.uo_out.value == 9, f"Expected 9 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -92,7 +92,7 @@ async def test_cpu_cmp_jumpnotzero(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     assert dut.uo_out.value == 8, f"Expected 8 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -126,7 +126,7 @@ async def test_cpu_jump_abs(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 12, f"Expected 12 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -170,7 +170,7 @@ async def test_cpu_jumpzero_taken(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 12)
+    await wait_execute_steps(dut, 12, flash)
     assert dut.uo_out.value == 9, f"Expected 9 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -214,7 +214,7 @@ async def test_cpu_jumpnotzero_taken(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     assert dut.uo_out.value == 8, f"Expected 8 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -258,7 +258,7 @@ async def test_cpu_jumpnegative_taken(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     assert dut.uo_out.value == 7, f"Expected 7 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -303,7 +303,7 @@ async def test_cpu_jumpcarry_taken(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     assert dut.uo_out.value == 6, f"Expected 6 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -338,5 +338,5 @@ async def test_cpu_countdown_loop(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 20)
+    await wait_execute_steps(dut, 20, flash)
     assert dut.uo_out.value == 0, f"Expected 0 but got {dut.uo_out.value}"

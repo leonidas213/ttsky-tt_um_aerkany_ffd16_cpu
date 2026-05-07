@@ -37,7 +37,7 @@ async def test_cpu_st_ld_absolute(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     assert dut.uo_out.value == 0x34, f"Expected 0x34 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -75,7 +75,7 @@ async def test_cpu_st_ld_ptr(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 12)
+    await wait_execute_steps(dut, 12, flash)
     assert dut.uo_out.value == 0x56, f"Expected 0x56 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -115,7 +115,7 @@ async def test_cpu_st_ld_offset(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 12)
+    await wait_execute_steps(dut, 12, flash)
     assert dut.uo_out.value == 0x77, f"Expected 0x77 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -150,7 +150,7 @@ async def test_cpu_mem_addr_zero(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 12)
+    await wait_execute_steps(dut, 12, flash)
     assert dut.uo_out.value == 0x44, f"Expected 0x44 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -187,7 +187,7 @@ async def test_cpu_mem_high_addr(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 12)
+    await wait_execute_steps(dut, 12, flash)
     assert dut.uo_out.value == 0x66, f"Expected 0x66 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -235,13 +235,13 @@ async def test_cpu_flash_read(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 0x2F, f"Expected 0x2F but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5)
+    await wait_execute_steps(dut, 5, flash)
     assert dut.uo_out.value == 0x13, f"Expected 0x13 but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5)
+    await wait_execute_steps(dut, 5, flash)
     assert dut.uo_out.value == 0xB2, f"Expected 0xB2 but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5)
+    await wait_execute_steps(dut, 5, flash)
     assert dut.uo_out.value == 0xA4, f"Expected 0xA4 but got {dut.uo_out.value}"
-    await wait_execute_steps(dut, 5)
+    await wait_execute_steps(dut, 5, flash)
     assert dut.uo_out.value == 0x2F, f"Expected 0x2F but got {dut.uo_out.value}"

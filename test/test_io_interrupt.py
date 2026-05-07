@@ -33,7 +33,7 @@ async def test_cpu_in_inputreg(dut):
     await reset_dut(dut)
 
     dut.ui_in.value = 0x25
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 0x25, f"Expected 0x25 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -66,7 +66,7 @@ async def test_cpu_rng_seed_and_read(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     cocotb.log.info(f"RNG output: {int(dut.uo_out.value):04X}")
     assert int(dut.uo_out.value) > 0
 
@@ -105,7 +105,7 @@ async def test_cpu_rng_changes(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 13)
+    await wait_execute_steps(dut, 13, flash)
     assert dut.uo_out.value != 0, "Expected RNG values to differ"
 
 @cocotb.test()
@@ -170,5 +170,5 @@ async def test_cpu_timer1_interrupt_basic(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 60)
+    await wait_execute_steps(dut, 60, flash)
     assert dut.uo_out.value == 0x77, f"Expected 0x77 but got {dut.uo_out.value}"

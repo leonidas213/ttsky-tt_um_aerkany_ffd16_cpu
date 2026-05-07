@@ -338,8 +338,65 @@ async def _resync_cpu_after_qspi_init(dut):
     dut._log.info("QSPI test-side CPU/memory-wait resync done")
 
 
-async def wait_execute_steps(dut, count: int, timeout_ns: int = 2_000_000):
-    """Wait for execute_now_pulse count after optional QSPI init resync."""
+async def wait_execute_steps(
+    dut,
+    count: int,
+    flash=None,
+    timeout_ns: int = 2_000_000,
+    settle_cycles: int = 32,
+):
+    """Gate-level-safe instruction wait helper.
+
+    Preferred mode:
+        await wait_execute_steps(dut, N, flash)
+
+    In this mode we do NOT look at internal RTL signals like
+    execute_now_pulse.  Instead, we wait until the external flash model has
+    observed N non-literal instruction fetches on the SPI/QSPI pins.  This keeps
+    the same test usable after synthesis/gate-level netlist generation, where
+    hierarchy names and optimized internal signals may disappear.
+
+    Fallback mode:
+        await wait_execute_steps(dut, N)
+
+    This keeps the old RTL-only behavior for older tests, but it can fail on
+    gate-level simulations because it depends on internal signal names.
+    """
+
+    if flash is not None:
+        # The memory model only fires instruction events when tracing is enabled.
+        if hasattr(flash, "trace_fetch"):
+            flash.trace_fetch = True
+
+        async def _wait_from_flash():
+            before_instr = getattr(flash, "instr_count", 0)
+            before_words = getattr(flash, "fetch_word_count", 0)
+
+            await flash.wait_instructions(count)
+
+            after_instr = getattr(flash, "instr_count", 0)
+            after_words = getattr(flash, "fetch_word_count", 0)
+            dut._log.info(
+                "FLASH EXEC WAIT: instr +%d/%d, words +%d",
+                after_instr - before_instr,
+                count,
+                after_words - before_words,
+            )
+
+            # Fetch is visible at the flash pins slightly before the CPU's
+            # architectural result is guaranteed visible.  A small fixed settle
+            # delay makes this behave like the old execute-pulse wait without
+            # relying on internal signals.
+            for _ in range(settle_cycles):
+                await RisingEdge(dut.clk)
+
+        await with_timeout(_wait_from_flash(), timeout_ns, "ns")
+        return
+
+    # ------------------------------------------------------------------
+    # Old RTL-only fallback.  Keep it for convenience, but do not use it
+    # for gate-level tests.
+    # ------------------------------------------------------------------
     await _resync_cpu_after_qspi_init(dut)
 
     try:
@@ -354,7 +411,7 @@ async def wait_execute_steps(dut, count: int, timeout_ns: int = 2_000_000):
     except Exception:
         exec_pulse = find_first_handle(dut, ("execute_now_pulse", "execute-pulse"))
 
-    async def _wait():
+    async def _wait_from_internal_exec_pulse():
         seen = 0
         while seen < count:
             await RisingEdge(dut.clk)
@@ -370,4 +427,4 @@ async def wait_execute_steps(dut, count: int, timeout_ns: int = 2_000_000):
             except Exception:
                 pass
 
-    await with_timeout(_wait(), timeout_ns, "ns")
+    await with_timeout(_wait_from_internal_exec_pulse(), timeout_ns, "ns")

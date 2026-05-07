@@ -40,7 +40,7 @@ async def test_cpu_add_val(dut):
     dut._log.info("Started flash and ram")
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
 
     cocotb.log.info("ADD for uo_out is %d", (dut.uo_out.value))
     assert dut.uo_out.value == 7, f"Expected 7 but got {dut.uo_out.value}"
@@ -73,7 +73,7 @@ async def test_cpu_mov_reg(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 9, f"Expected 9 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -106,7 +106,7 @@ async def test_cpu_add_reg(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 7)
+    await wait_execute_steps(dut, 7, flash)
     assert dut.uo_out.value == 7, f"Expected 7 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -137,7 +137,7 @@ async def test_cpu_add_imm4(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 8, f"Expected 8 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -170,7 +170,7 @@ async def test_cpu_sub_reg(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 7)
+    await wait_execute_steps(dut, 7, flash)
     assert dut.uo_out.value == 7, f"Expected 7 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -203,7 +203,7 @@ async def test_cpu_and_reg(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 7)
+    await wait_execute_steps(dut, 7, flash)
     assert dut.uo_out.value == 10, f"Expected 10 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -236,7 +236,7 @@ async def test_cpu_or_reg(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 7)
+    await wait_execute_steps(dut, 7, flash)
     assert dut.uo_out.value == 15, f"Expected 15 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -269,7 +269,7 @@ async def test_cpu_xor_reg(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 7)
+    await wait_execute_steps(dut, 7, flash)
     assert dut.uo_out.value == 5, f"Expected 5 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -301,7 +301,7 @@ async def test_cpu_neg(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 255, f"Expected 255 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -333,7 +333,7 @@ async def test_cpu_not(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 255, f"Expected 255 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -365,7 +365,7 @@ async def test_cpu_lsl(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 6, f"Expected 6 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -397,7 +397,7 @@ async def test_cpu_lsr(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 4, f"Expected 4 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -430,7 +430,7 @@ async def test_cpu_asr(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 8)
+    await wait_execute_steps(dut, 8, flash)
     assert dut.uo_out.value == 255, f"Expected 255 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -463,7 +463,7 @@ async def test_cpu_swap(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 0x12, f"Expected 0x12 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -496,7 +496,7 @@ async def test_cpu_swapn(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 0x43, f"Expected 0x43 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -532,7 +532,7 @@ async def test_cpu_adc_no_carry_in(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 10)
+    await wait_execute_steps(dut, 10, flash)
     assert dut.uo_out.value == 7, f"Expected 7 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -570,7 +570,7 @@ async def test_cpu_adc_with_carry_in(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 8, f"Expected 8 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -608,7 +608,7 @@ async def test_cpu_sbc_with_borrow(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 6, f"Expected 6 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -653,7 +653,7 @@ async def test_cpu_lsl_sets_carry(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 12)
+    await wait_execute_steps(dut, 12, flash)
     assert dut.uo_out.value == 5, f"Expected 5 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -697,7 +697,7 @@ async def test_cpu_lsr_sets_carry(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 4, f"Expected 4 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -733,7 +733,7 @@ async def test_cpu_rol_uses_carry(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 8)
+    await wait_execute_steps(dut, 8, flash)
     assert dut.uo_out.value == 1, f"Expected 1 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -781,7 +781,7 @@ async def test_cpu_ror_uses_carry(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 14)
+    await wait_execute_steps(dut, 14, flash)
     assert dut.uo_out.value == 3, f"Expected 3 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -812,7 +812,7 @@ async def test_cpu_ldi_i16_positive(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 6)
+    await wait_execute_steps(dut, 6, flash)
     assert dut.uo_out.value == 0x34, f"Expected 0x34 but got {dut.uo_out.value}"
 
 @cocotb.test()
@@ -845,5 +845,5 @@ async def test_cpu_add_i16_negative(dut):
     cocotb.start_soon(ram.run())
     await reset_dut(dut)
 
-    await wait_execute_steps(dut, 9)
+    await wait_execute_steps(dut, 9, flash)
     assert dut.uo_out.value == 3, f"Expected 3 but got {dut.uo_out.value}"
