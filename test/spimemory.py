@@ -620,9 +620,41 @@ class TTContinuousQSPIFlash(MemoryImage):
         else:
             await self.handle_init_or_command()
 
-    async def run(self):
+    async def _wait_reset_released_and_cs_idle(self):
+        """Gate-level-safe startup for the flash model.
+
+        At gate level, uio_out can be X during reset. TTPins.out_bit() treats
+        X/Z as 0, which can look like CS low and start a fake transaction at
+        time 0. Wait until reset is released and CS is observed idle-high before
+        accepting the first real flash command.
+        """
         self.release()
+
+        while str(self.dut.rst_n.value) != "1":
+            await RisingEdge(self.dut.clk)
+
+        idle_cycles = 0
+        while idle_cycles < 2:
+            await RisingEdge(self.dut.clk)
+            if str(self.dut.rst_n.value) != "1":
+                idle_cycles = 0
+            elif self.cs_high():
+                idle_cycles += 1
+            else:
+                idle_cycles = 0
+
+        self._log("reset released and flash CS idle-high observed")
+
+    async def run(self):
+        await self._wait_reset_released_and_cs_idle()
+
         while True:
+            # If the DUT is reset again, throw away any partial transaction and
+            # wait for a clean idle-high CS before listening again.
+            if str(self.dut.rst_n.value) != "1":
+                self.release()
+                await self._wait_reset_released_and_cs_idle()
+
             await self.wait_cs_low()
             try:
                 await self.transaction()

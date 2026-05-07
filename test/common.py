@@ -1,4 +1,5 @@
 
+import cocotb
 from cocotb.triggers import RisingEdge, ReadWrite, ReadOnly, with_timeout
 from cocotb.handle import Force, Release
 
@@ -167,264 +168,125 @@ def find_first_path(root, paths, fallback_names=()):
 # Optional simulation-only init helpers
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Gate-level detection
+# -----------------------------------------------------------------------------
 
-async def clamp_qspi_init_waits(dut):
-    """Simulation-only helper that shortens the QSPI init wait counter.
-
-    Prefer compile-time fast-init parameters if possible.  This helper remains
-    here because it is useful when you cannot touch/elaborate the Verilog params.
-    """
-    init_wait_cnt = find_first_path(
-        dut,
-        (
-            "tt_um_remedy_cpu.qspi_memory_interface_i19.init_wait_cnt",
-            "qspi_memory_interface_i19.init_wait_cnt",
-        ),
-        ("init_wait_cnt",),
-    )
-    init_done = find_first_path(
-        dut,
-        (
-            "tt_um_remedy_cpu.qspi_memory_interface_i19.init_done_r",
-            "qspi_memory_interface_i19.init_done_r",
-        ),
-        ("init_done_r", "init_done"),
-    )
-
-    while True:
-        await RisingEdge(dut.clk)
-        await ReadWrite()
-
-        if str(dut.rst_n.value) != "1":
-            try:
-                init_wait_cnt.value = Release()
-            except Exception:
-                pass
-            continue
-
-        try:
-            if int(init_done.value) == 1:
-                init_wait_cnt.value = Release()
-                dut._log.info("QSPI init wait clamp released")
-                return
-        except Exception:
-            pass
-
-        init_wait_cnt.value = Force(0)
+def is_gate_level():
+    """Return True when Makefile passes +GATE_LEVEL to cocotb/simulator."""
+    return "GATE_LEVEL" in cocotb.plusargs
 
 
-async def _resync_cpu_after_qspi_init(dut):
-    """Best-effort simulation resync after QSPI init.
+# -----------------------------------------------------------------------------
+# Gate-level-safe wait helpers
+# -----------------------------------------------------------------------------
 
-    If the exact internal handles are not present, this function logs a warning
-    and returns.  The flash model also has a word-address offset option, so your
-    tests can still run even when the hierarchy is flattened differently.
-    """
-    if getattr(dut, "_qspi_test_resynced", False):
-        return
-
-    try:
-        init_done = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.qspi_memory_interface_i19.init_done_r",
-                "qspi_memory_interface_i19.init_done_r",
-            ),
-            ("init_done_r", "init_done"),
-        )
-        cpu_state = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.cpu_cycle_controller_tiny_i16.state",
-                "cpu_cycle_controller_tiny_i16.state",
-            ),
-        )
-        mem_state = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.memory_wait_controller_tiny_i17.state",
-                "memory_wait_controller_tiny_i17.state",
-            ),
-        )
-        mem_op = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.memory_wait_controller_tiny_i17.op",
-                "memory_wait_controller_tiny_i17.op",
-            ),
-        )
-        mem_stall = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.memory_wait_controller_tiny_i17.mem_stall",
-                "memory_wait_controller_tiny_i17.mem_stall",
-            ),
-        )
-        fetch_done = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.memory_wait_controller_tiny_i17.fetch_done",
-                "memory_wait_controller_tiny_i17.fetch_done",
-            ),
-        )
-        data_done = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.memory_wait_controller_tiny_i17.data_done",
-                "memory_wait_controller_tiny_i17.data_done",
-            ),
-        )
-        spi_ld = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.memory_wait_controller_tiny_i17.spi_ld",
-                "memory_wait_controller_tiny_i17.spi_ld",
-            ),
-        )
-        spi_st = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.memory_wait_controller_tiny_i17.spi_st",
-                "memory_wait_controller_tiny_i17.spi_st",
-            ),
-        )
-        pc = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.programCounter_i6.PCr",
-                "programCounter_i6.PCr",
-            ),
-            ("PCr", "pc", "program_counter"),
-        )
-    except Exception as e:
-        dut._log.warning("Could not bind explicit resync handles: %s", e)
-        dut._qspi_test_resynced = True
-        return
-
-    while True:
-        await RisingEdge(dut.clk)
-        await ReadOnly()
-        if str(dut.rst_n.value) == "1":
-            try:
-                if int(init_done.value) == 1:
-                    break
-            except Exception:
-                pass
-
-    await RisingEdge(dut.clk)
-    await ReadWrite()
-
-    for h, value in (
-        (cpu_state, 0),
-        (mem_state, 0),
-        (mem_op, 0),
-        (mem_stall, 0),
-        (fetch_done, 0),
-        (data_done, 0),
-        (spi_ld, 0),
-        (spi_st, 0),
-        (pc, 0),
-    ):
-        h.value = Force(value)
-
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
-    await ReadWrite()
-
-    for h in (cpu_state, mem_state, mem_op, mem_stall, fetch_done, data_done, spi_ld, spi_st, pc):
-        h.value = Release()
-
-    dut._qspi_test_resynced = True
-    dut._log.info("QSPI test-side CPU/memory-wait resync done")
+from cocotb.triggers import Timer, First
 
 
 async def wait_execute_steps(
     dut,
     count: int,
-    flash=None,
-    timeout_ns: int = 2_000_000,
-    settle_cycles: int = 32,
+    flash,
+    timeout_ns: int = None,
+    settle_cycles: int = 64,
+    progress_ns: int = 1_000_000,
 ):
-    """Gate-level-safe instruction wait helper.
+    """Wait for executed instructions using ONLY external flash traffic.
 
-    Preferred mode:
+    This helper intentionally never reads internal RTL/gate signals such as
+    execute_now_pulse, controller state, PC registers, or synthesized net names.
+
+    Required usage:
         await wait_execute_steps(dut, N, flash)
 
-    In this mode we do NOT look at internal RTL signals like
-    execute_now_pulse.  Instead, we wait until the external flash model has
-    observed N non-literal instruction fetches on the SPI/QSPI pins.  This keeps
-    the same test usable after synthesis/gate-level netlist generation, where
-    hierarchy names and optimized internal signals may disappear.
+    How it works:
+      - The SPI/QSPI flash model observes real memory-pin transactions.
+      - Each fetched non-literal word increments flash.instr_count.
+      - This function waits until N additional non-literal instruction words are
+        fetched, then waits a few clock cycles for outputs/registers to settle.
 
-    Fallback mode:
-        await wait_execute_steps(dut, N)
-
-    This keeps the old RTL-only behavior for older tests, but it can fail on
-    gate-level simulations because it depends on internal signal names.
+    Timeout behavior:
+      - RTL sim defaults to 2 ms.
+      - Gate-level sim defaults to 120 ms because the synthesized netlist may
+        contain the real QSPI init delay.
     """
 
-    if flash is not None:
-        # The memory model only fires instruction events when tracing is enabled.
-        if hasattr(flash, "trace_fetch"):
-            flash.trace_fetch = True
+    if timeout_ns is None:
+        timeout_ns = 120_000_000 if is_gate_level() else 2_000_000
 
-        async def _wait_from_flash():
-            before_instr = getattr(flash, "instr_count", 0)
-            before_words = getattr(flash, "fetch_word_count", 0)
-
-            await flash.wait_instructions(count)
-
-            after_instr = getattr(flash, "instr_count", 0)
-            after_words = getattr(flash, "fetch_word_count", 0)
-            dut._log.info(
-                "FLASH EXEC WAIT: instr +%d/%d, words +%d",
-                after_instr - before_instr,
-                count,
-                after_words - before_words,
-            )
-
-            # Fetch is visible at the flash pins slightly before the CPU's
-            # architectural result is guaranteed visible.  A small fixed settle
-            # delay makes this behave like the old execute-pulse wait without
-            # relying on internal signals.
-            for _ in range(settle_cycles):
-                await RisingEdge(dut.clk)
-
-        await with_timeout(_wait_from_flash(), timeout_ns, "ns")
-        return
-
-    # ------------------------------------------------------------------
-    # Old RTL-only fallback.  Keep it for convenience, but do not use it
-    # for gate-level tests.
-    # ------------------------------------------------------------------
-    await _resync_cpu_after_qspi_init(dut)
-
-    try:
-        exec_pulse = find_first_path(
-            dut,
-            (
-                "tt_um_remedy_cpu.cpu_cycle_controller_tiny_i16.execute_now_pulse",
-                "cpu_cycle_controller_tiny_i16.execute_now_pulse",
-            ),
-            ("execute_now_pulse", "execute-pulse"),
+    if flash is None:
+        raise ValueError(
+            "wait_execute_steps() requires the flash model: "
+            "await wait_execute_steps(dut, count, flash). "
+            "Internal execute signals are intentionally not supported."
         )
-    except Exception:
-        exec_pulse = find_first_handle(dut, ("execute_now_pulse", "execute-pulse"))
 
-    async def _wait_from_internal_exec_pulse():
-        seen = 0
-        while seen < count:
+    if not hasattr(flash, "instr_count"):
+        raise TypeError("flash model must expose instr_count")
+
+    # Enable fetch tracing/event generation in the memory model.
+    if hasattr(flash, "trace_fetch"):
+        flash.trace_fetch = True
+
+    start_instr = int(getattr(flash, "instr_count", 0))
+    target_instr = start_instr + int(count)
+    start_words = int(getattr(flash, "fetch_word_count", 0))
+
+    dut._log.info(
+        "FLASH EXEC WAIT: count=%d start_instr=%d target_instr=%d timeout=%dns gate=%s",
+        count,
+        start_instr,
+        target_instr,
+        timeout_ns,
+        is_gate_level(),
+    )
+
+    async def _wait_from_flash():
+        last_report_instr = start_instr
+        last_report_words = start_words
+
+        while int(getattr(flash, "instr_count", 0)) < target_instr:
+            # Prefer the flash model's event if it exposes one. This avoids
+            # polling internal DUT signals and also avoids busy waiting.
+            if hasattr(flash, "_instr_event"):
+                await First(flash._instr_event.wait(), Timer(progress_ns, units="ns"))
+            else:
+                await Timer(progress_ns, units="ns")
+
+            now_instr = int(getattr(flash, "instr_count", 0))
+            now_words = int(getattr(flash, "fetch_word_count", 0))
+
+            # Progress log only when nothing changed during the last window.
+            # This is very helpful for gate-level debugging without touching
+            # internal synthesized names.
+            if now_instr == last_report_instr and now_words == last_report_words:
+                try:
+                    cs = flash.pins.flash_cs
+                    sclk = flash.pins.sclk
+                except Exception:
+                    cs = "?"
+                    sclk = "?"
+                dut._log.info(
+                    "FLASH WAIT: instr=%d/%d words=%d last_word_addr=%s last_word=%s CS=%s SCLK=%s cont=%s",
+                    now_instr - start_instr,
+                    count,
+                    now_words - start_words,
+                    hex(getattr(flash, "last_fetch_word_addr", 0)) if getattr(flash, "last_fetch_word_addr", None) is not None else "None",
+                    hex(getattr(flash, "last_fetch_word", 0)) if getattr(flash, "last_fetch_word", None) is not None else "None",
+                    cs,
+                    sclk,
+                    getattr(flash, "continuous_enabled", "?"),
+                )
+
+            last_report_instr = now_instr
+            last_report_words = now_words
+
+        got_instr = int(getattr(flash, "instr_count", 0)) - start_instr
+        got_words = int(getattr(flash, "fetch_word_count", 0)) - start_words
+        dut._log.info("FLASH EXEC WAIT DONE: instr +%d/%d, words +%d", got_instr, count, got_words)
+
+        for _ in range(int(settle_cycles)):
             await RisingEdge(dut.clk)
-            await ReadOnly()
 
-            if str(dut.rst_n.value) != "1":
-                continue
-
-            try:
-                if int(exec_pulse.value) == 1:
-                    seen += 1
-                    dut._log.info("EXEC STEP %d/%d", seen, count)
-            except Exception:
-                pass
-
-    await with_timeout(_wait_from_internal_exec_pulse(), timeout_ns, "ns")
+    await with_timeout(_wait_from_flash(), timeout_ns, "ns")
