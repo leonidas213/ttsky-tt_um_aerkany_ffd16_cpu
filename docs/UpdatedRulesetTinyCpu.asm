@@ -1,170 +1,114 @@
-; CPU SPECS
-; external spi memory up to 64k
-; external serial rom up to 64k
+; Remedy CPU / TinyCPU ruleset
 ;
+; Current hardware summary:
+; - 16-bit CPU. All normal RAM/flash accesses are 16-bit half-word accesses.
+; - CPU addresses are word addresses. External memory byte address = {prefix, cpu_addr, 1'b0}.
+; - Flash is read through QSPI continuous-read mode.
+; - RAM is read/written through plain SPI mode.
+; - Usable external word address range is 0x0000-0xFFFF, mapping to byte range 0x00000-0x1FFFF.
 ;
-; first you send read command to spi flash
-; then send 16 bit program address from cpu
-; then read 16 bit opcode
-; And after a clock cycle or two it will execute it.
-; rinse and repeat
+; Immediate behavior:
+; - Any fetched word with bit15 = 1 is treated as an immediate word.
+; - The immediate word updates the immediate register and is not executed as a normal opcode.
+; - The following real instruction can consume that immediate value.
 ;
-; Currently there is no continous reads... so you have to write 3 extra byte everytime...
-; I am trying to implement it but we will see...
-; Well if you are reading this then, that means there is still no continous reads.....
+; Timers:
+; - timer1 is 16-bit.
+; - timer2 is 9-bit in the current RTL, even though it is the tiny timer.
+; - Timer config bits:
+;       bit0    enable
+;       bits4:1 prescaler select
+;       bit5    auto reload
+;       bit6    interrupt enable
+;       bit7    source select: 0 = system clock, 1 = execute_pulse
+; - Prescaler values:
+;       0=/1, 1=/2, 2=/4, 3=/8, 4=/16, 5=/32,
+;       6=/64, 7=/128, 8=/256, 9=/512, 10=/1024, 11=/2048
+; - Values 12-15 are reserved/currently behave like /1 in the RTL.
+; - At 25 MHz, system-clock /2048 gives 81.92 us per timer tick.
+; - If execute_pulse happens every 15 clocks, execute-source /2048 gives 1.2288 ms per timer tick.
 ;
+; Interrupts:
+; - Fixed interrupt vector: 0x0002.
+; - Use reti to return.
+; - Current interrupt sources:
+;       bit0 = timer1
+;       bit1 = timer2
+;       bit2 = I2C
+; - CpuinterruptEnable write bit0 = global enable.
+; - InputInterruptEnable is now really the IRQ source-enable mask register.
+; - InterruptRegister is the pending register. Write 1s to clear pending bits.
+; - Interrupts are blocked while an immediate word is active, so an IRQ should not split imm + use-imm.
 ;
-;                  _    _   _    _   _    _   _    _   _   _   _    _   _    _   _    _   _    _   _    _   _    _   _    _   _   _   _    _   _    _   _    _   _    _   _    _   _    _   _    _   _   _    _   _
-;  CLOCK         _/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \_/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \_/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \__/ \_/ \_/ \__/ \_/ \___| o o o
-;                ----------------------------------------------------------------------------------------------------------------- ----------------------------------------------------------------------------------- | o o o
-;  Bit numbers   |  8 |  7|  6 |  5|  4 |  3|  2 |  1| 0 | 15| 14 | 13| 12 | 11| 10 |  9|  8 |  7|  6 |  5|  4 |  3|  2 |  1| 0 | 15| 14 | 13| 12| 11 | 10 |  9|  8 |  7|  6|  5 |  4|  3 |  2|  1 |  0|
-;  Datas         |          0x03 Read command(Write)     |                Program Counter(Program Address)(Write)              |                     Opcode(Operation code)(Read)                      | 3 clock cycles| o o o
+; I2C:
+; - Small fixed-speed I2C master.
+; - I2cDivider/I2cPrescaler address reads fixed divider value 20.
+; - Approx SCL at 25 MHz: clk / (3 * (20 + 1)) ~= 397 kHz.
 ;
-; Yeah i know it is slow but it is what it is
-; so if you have 43 mhz clock this cpu will run at 1mhz :D
-; Anyway here is the cpu specs
+; Debugger:
+; - Debug frame: 0xA5 sync + 4-bit cmd + 4-bit addr + 16-bit data.
+; - Commands: 0=ping, 1=read debug reg, 2=write debug reg.
+; - Debug core supports halt/run/step, one dynamic breakpoint, static brk, and jump/load-PC.
 ;
-; Total of 16 general purpouse registers that can hold 16 bit numbers
-;  or 13 general purpouse registers and stack pointer, branch pointer, return address registers
-;
-; - A Random number generator (linear feedback shift register) that generates 8 bit random numbers at every clock cycle but you need toset a seed first
-; - 2 timers with:
-;      - Auto Reload functionality after reaching the target value
-;      - Interrupt generation upon reaching the target
-;      - Capability to read the timer value
-;      - Timer reset functionality
-;      - 16-bit prescaler ranging from 1x (1 clock cycle per tick) to 32768x (32768 clock cycles per tick)
-;
-; - I2C master with:
-;      - Raise an interrupt when finished transaction
-;      - Not much tested clock s_____trecth support
-;      - Ack Nack capability
-;      - 16 bit Prescaler
-;      - Write/Read operations
-;      - Typical I2c master... but it can only hold 8 bit of data so it needs constant attention
-;       For example lets say you want to read from device 0x58 and its 0x14th register
-;         - Enable interrupt (otherwise you need to poll it)
-;         - START command + ADDR(W) -> it finished sending it and raised an interrupt
-;         - WRITE register addr     -> it finished sending it and raised an interrupt
-;         - START command + ADDR(R) -> it finished sending it and raised an interrupt
-;         - READ register content   -> it finished sending it and raised an interrupt
-;         - then you copy the value from peripheral bus to cache registers.
-;         - And then you can copy from cache registers to ram.
-;
-; -Arithmetic Logic Unit (ALU) capabilities include:
-;   - Addition
-;   - Subtraction
-;   - Bitwise AND
-;   - Bitwise OR
-;   - Bitwise XOR
-;   - Bitwise NOT
-;   - Negation
-;   - Logical shift left
-;   - Logical shift right
-;   - Arithmetic shift right
-;   - Byte swapping
-;   - Nibble swapping
-;   - ALU Flags: Negative, Zero, Carry
-;
-; -Immediate register for storing 16-bit values
-;
-; -Jump instructions supporting both absolute and relative addresses
-;   abs(current address - target address) < 255 -> Relative jump - 1 cycle
-;   abs(current address - target address) > 255 -> Absolute jump - 2 cycle
-;
-; -Input pins can trigger interrupts (not edge-sensitive, shared interrupt line, global enable/disable)
-;   -input pins can generate interrupt but it is not edge sensitive
-;   and it is not possible to disable interrupt for a specific pin
-;   because all input pins share the same interrupt line
-;   so the interrupt happens when any of the input pins change (and you don't know which one caused it)
-;
-;-Interrupts can be enabled or disabled globally
-;   Interrupt register to manage and read active interrupts (1 I2c master, 2 timers, 1 input pin)
-;   - Interrupt register format:
-;       |    15-4    |    3   |    2   |   1    |       0        |
-;       |------------|--------|--------|--------|----------------|
-;       |  always 0  |  I2C   | timer2 | timer1 | inputInterrupt |
-;   - When an interrupt happens you need to flip the bit on the interrupt register to 0
-;   otherwise it will trigger an interrupt again.
-;   - While returning from interrupt you need to use "reti"
-;   - all interrupt use the same function address and it is hardcoded to 0x0002
-;   - When an interrupt happens if the current operation is not a immediate or ram write/read operation
-;   it will record current pc and jump to 0x0002. When you finish handling the interrupt use "reti" to continue
-;   - if another interrupt happens for some reason it will not jump to 0x0002. But as soon as you use "reti"
-;   it will jump back to interrupt handler.
-;   - Normally when an interrupt happens it will lock the interrupt bus so other interrupts doesn't happen.
-;   well.... sometimes they don't listen....
-;
-;
-;
+;---------- MEMORY-MAPPED REGISTERS -------------
+; GPIO Registers
+InputReg = 0                   ; 16-bit read, lower 8 bits are external/debug input pins
+OutputReg = 1                  ; 8-bit output register
 
+; Timer 1: 16-bit
+; Timer config bits: [7]=source_execute, [6]=irq_en, [5]=auto_reload, [4:1]=prescaler, [0]=enable
+timer1Config = 2
+timer1Target = 3               ; 16-bit target value. target=0 disables match.
+timer1Reset = 4                ; write bit0=1 to reset timer1 and clear its config
+timer1ReadAdr = 5              ; read 16-bit count
 
-;---------- REGISTERS   -------------
-; this timer is 16-bit
-timer1Config = 2               ; 5-bit    |    1 bit       |  1 bit  |    4 bit   | 1 bit  |
-;                                         |Interrupt enable| reload  |  prescaler | enable |
+; Timer 2: 9-bit tiny timer in current RTL
+; Same config layout as timer1
+timer2Config = 6
+timer2Target = 7               ; 9-bit target value. target=0 disables match.
+timer2Reset = 8                ; write bit0=1 to reset timer2 and clear its config
+timer2ReadAdr = 9              ; read 9-bit count, zero-extended
 
-timer1Target = 3               ; 16-bit target value for interrupt generation
-timer1Reset = 4                ; 1-bit reset timer
-timer1ReadAdr = 5              ; 16-bit
+timerSyncStart = 10            ; write bit0 to update enable bit of both timers at the same time
 
-; this timer is 8-bit
-timer2Config = 6               ; Similar configuration as timer1
-timer2Target = 7               ; 8-bit target value for timer2
-timer2Reset = 8                ; 1-bit reset timer2
-timer2ReadAdr = 9             ; 8-bit
-
-timerSyncStart = 10            ; 1-bit, when set to 1, it starts all timers at the same time.
 ; random number generator
 ; RNG is always active at every clock cycle
-RandomSeedAddr = 11            ; 16-bit seed location
-RandomReg = 12                 ; Generated value
-
-; GPIO Registers
-OutputReg = 1                  ; 8-bit data for GPIO pins
-InputReg = 0                   ; 8-bit data from GPIO pins
+RandomSeedAddr = 11            ; write 8-bit seed
+RandomReg = 12                 ; read generated random value
 
 ; Interrupt registers
-CpuinterruptEnable = 13        ; 1-bit
-InputInterruptEnable = 14      ; 1-bit if 1, input pins interrupt is enabled
-InterruptRegister = 15         ; 16-bit
+CpuinterruptEnable = 13        ; write bit0 global enable. read bit0 global, bit1 irq_lock, bit2 intr
+InputInterruptEnable = 14      ; legacy name: IRQ source enable mask. bit0 timer1, bit1 timer2, bit2 I2C
+InterruptRegister = 15         ; pending IRQ bits. write 1s to clear pending bits
 
-I2cCtrl = 16                   ; |    1 bit      |  1 bit     |  1 bit  |
-                               ;   strech enable | irq enable | enable  |
-I2cStatus = 17
-; |    1 bit    |    1 bit      |  1 bit     |  1 bit  |         1 bit         |        1 bit       |
-;  irq pending  | rx valid      | ack error  | done    | bus active(read only) | op busy (read only)
-I2cPrescaler = 18               ; 16-bit prescaler
-I2cDataReg = 19                 ; 8-bit, if you write to it it will be writen to the bus,
-                                ; if you read from it, it will give you the last read value from the bus.
-I2cCommand = 20                 ; when you want to write to the bus you can exxecute different commands
-; for example if you read multiple values with "cmd read" and
-; you want to finish it reading with "nack" you need to use "cmd read nack"
-; so the device that you are controlling will understand that you don't want to read anymore
-; ex:mpu6050
-; |    1 bit       |  1 bit   |  1 bit    |  1 bit    |  1 bit     |
-; |  cmd read nack | cmd read | cmd write |  cmd stop | cmd start  |
+; I2C registers
+I2cCtrl = 16                   ; bit0 enable, bit1 irq enable
+I2cStatus = 17                 ; bit0 busy, bit1 bus_active, bit2 done, bit3 ack_error, bit4 rx_valid, bit5 irq/done
+I2cDivider = 18                ; read-only fixed divider value, currently 20
+I2cPrescaler = 18              ; legacy alias for I2cDivider. Writes are ignored by current RTL.
+I2cDataReg = 19                ; write TX byte / read RX byte
+I2cCommand = 20                ; bit0 START, bit1 STOP, bit2 WRITE, bit3 READ, bit4 NACK-after-read
 
-; ---------- PROGRAMMING EXAMPLES -----------
-; Example 1: Basic addition and store result in memory
-; Load immediate values into registers and add them
-;
-; ldi r1, 0x12            ; Load 0x12 into r1
-; ldi r2, 0x20            ; Load 0x20 into r2
-; add r1, r2              ; Add r1 and r2, store result in r1
-; sts r1, 0x1000          ; Store result from r1 into memory address 0x1000
-; putoutput r1            ; Output result from r1 [only lower 8 bits]
+;---------- TIMER CONFIG HELPERS -------------
+TimerEnableBit = 0
+TimerPrescalerShift = 1
+TimerReloadBit = 5
+TimerIrqEnableBit = 6
+TimerSourceExecuteBit = 7
 
-; Example 2: Timer configuration
-; ldi r1, 0x01            ; Enable timer into r1
-; ldi r2, 0x1000          ; Load target value into r2
-; out timer1Config, r1    ; Enable timer1 with prescaler value 1x with no reload and no interrupt
-; out timer1Target, r2    ; Set timer1 target value
-; loop:
-;    in  r1, timer1ReadAdr   ; Read timer1 value
-;    putoutput r1            ; Output timer1 value [only lower 8 bits]
-;    jump loop               ; Loop indefinitely
-
+; Prescaler encoding
+TimerDiv1    = 0
+TimerDiv2    = 1
+TimerDiv4    = 2
+TimerDiv8    = 3
+TimerDiv16   = 4
+TimerDiv32   = 5
+TimerDiv64   = 6
+TimerDiv128  = 7
+TimerDiv256  = 8
+TimerDiv512  = 9
+TimerDiv1024 = 10
+TimerDiv2048 = 11
 
 ; Configuration for CustomAssembly to how to compile
 #bankdef data
@@ -492,7 +436,7 @@ I2cCommand = 20                 ; when you want to write to the bus you can exxe
     {
         0x3b @0`4 @rs`4
     }
-
+    ;______________________________________________________________________
     ; jump to the address given by [const] unconditionally.
     ; It jumps relatively if the target address is within -128 to 127 bytes; relative from the current pc.
     jump {value: i16} =>            
@@ -502,7 +446,7 @@ I2cCommand = 20                 ; when you want to write to the bus you can exxe
         assert(relad >= -129)
         0x3d @relad`8
     }
-
+    ;______________________________________________________________________
     ; jump to the address given by [const] unconditionally.
     ; it will jump to the given address; absolute
     jump {value: i16} =>           
@@ -540,6 +484,9 @@ I2cCommand = 20                 ; when you want to write to the bus you can exxe
     {
         0x43 @rd`4 @rs`4
     }
+    ; Static breakpoint instruction. Only stops when debugger static break is enabled.
+    brk => 0x49 @0`4 @0`4
+    ;______________________________________________________________________
     ; When an interrupt happens it will store the current pc in the PC controller.
     ; And then it will jump to the interrupt handler at address 0x0002. 
     ; When you finish handling the interrupt you need to use "reti" to jump back 
@@ -592,14 +539,30 @@ I2cCommand = 20                 ; when you want to write to the bus you can exxe
     ;______________________________________________________________________
     ;Read the current timer value and put them in to the register Rd
     readTimer {value: timers}, {rd:registers} => asm{
-        in  rd, value
+        in  {rd}, {value}
     }
 
     ;______________________________________________________________________
     ;Configure timer using Register R12
-    configureTimer {timer:timers},{inter_enable:u1}, {reload:u1}, {prescaler:u3}, {enable:u1} => asm
+    configureTimer {timer:timers},{inter_enable:u1}, {reload:u1}, {prescaler:u4}, {enable:u1} => asm
     {
-        tempval = (inter_enable << 6) |(reload << 5) | (prescaler << 1) | enable
+        assert(prescaler <= 11)
+        tempval = (inter_enable << 6) | (reload << 5) | (prescaler << 1) | enable
+        timerConfig = timer - 3
+
+        ldi r12, tempval
+        out timerConfig, r12
+
+    }
+
+    ;______________________________________________________________________
+    ; Configure timer with explicit source select using Register R12
+    ; source = 0 -> system clock source
+    ; source = 1 -> execute_pulse source
+    configureTimerSource {timer:timers},{inter_enable:u1}, {reload:u1}, {prescaler:u4}, {source:u1}, {enable:u1} => asm
+    {
+        assert(prescaler <= 11)
+        tempval = (source << 7) | (inter_enable << 6) | (reload << 5) | (prescaler << 1) | enable
         timerConfig = timer - 3
 
         ldi r12, tempval
@@ -621,10 +584,9 @@ I2cCommand = 20                 ; when you want to write to the bus you can exxe
     ;Reset timer using Register R12
     resetTimer {timer:timers} => asm
     {
-
-        timerTarget = timer - 1
-        ldi r12, value
-        out timerTarget, r12
+        timerReset = timer - 1
+        ldi r12, 1
+        out timerReset, r12
 
     }
 
@@ -686,7 +648,7 @@ ret {value}=> asm{
     add SP, {value}+1
     rret RA
 }
-
+    ;______________________________________________________________________
 ;sub SP, 1          ;1 instruction
 ;ld  RA, [$+2]      ;2 instruction
 ;st  [SP], RA       ;1 instruction
