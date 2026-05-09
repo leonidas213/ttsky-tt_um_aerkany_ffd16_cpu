@@ -53,7 +53,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\bidir_wrapper.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\bidir_wrapper.v</file>
         </entry>
       </elementAttributes>
       <pos x="-21140" y="-8200"/>
@@ -139,7 +139,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\debug_panel_serial_sim.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\debug_panel_serial_sim.v</file>
         </entry>
       </elementAttributes>
       <pos x="-21800" y="-7800"/>
@@ -1359,7 +1359,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\programCounter.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\programCounter.v</file>
         </entry>
       </elementAttributes>
       <pos x="-20060" y="-7220"/>
@@ -1691,7 +1691,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\multipleToMux-4.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\multipleToMux-4.v</file>
         </entry>
       </elementAttributes>
       <pos x="-19380" y="-7840"/>
@@ -2132,7 +2132,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\interrupt_controller.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\interrupt_controller.v</file>
         </entry>
       </elementAttributes>
       <pos x="-15580" y="-7700"/>
@@ -2260,7 +2260,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\lfsr.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\lfsr.v</file>
         </entry>
       </elementAttributes>
       <pos x="-16460" y="-9040"/>
@@ -2278,7 +2278,7 @@
         </entry>
         <entry>
           <string>externalInputs</string>
-          <string>dOut:16,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n,execute_pulse</string>
+          <string>dOut:16,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n</string>
         </entry>
         <entry>
           <string>externalOutputs</string>
@@ -2290,7 +2290,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\timer_small.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\timer_small.v</file>
         </entry>
       </elementAttributes>
       <pos x="-15580" y="-9440"/>
@@ -2374,7 +2374,7 @@
         </entry>
         <entry>
           <string>externalInputs</string>
-          <string>dOut:9,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n,execute_pulse</string>
+          <string>dOut:9,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n</string>
         </entry>
         <entry>
           <string>externalOutputs</string>
@@ -2386,7 +2386,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\timer_tiny.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\timer_tiny.v</file>
         </entry>
       </elementAttributes>
       <pos x="-15580" y="-8980"/>
@@ -2416,7 +2416,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\reg16x16.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\reg16x16.v</file>
         </entry>
       </elementAttributes>
       <pos x="-18660" y="-7460"/>
@@ -3054,7 +3054,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\i2c_master_ctrl_min.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\i2c_master_ctrl_min.v</file>
         </entry>
       </elementAttributes>
       <pos x="-15380" y="-7100"/>
@@ -3172,7 +3172,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\opcode_microcode_rom.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\opcode_microcode_rom.v</file>
         </entry>
       </elementAttributes>
       <pos x="-20140" y="-6560"/>
@@ -3693,7 +3693,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\debug_serial_frontend.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\debug_serial_frontend.v</file>
         </entry>
       </elementAttributes>
       <pos x="-19920" y="-5020"/>
@@ -4228,7 +4228,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\cpu_cycle_controller.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\cpu_cycle_controller.v</file>
         </entry>
       </elementAttributes>
       <pos x="-18020" y="-5120"/>
@@ -4258,7 +4258,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\memory_wait_controller.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\memory_wait_controller.v</file>
         </entry>
       </elementAttributes>
       <pos x="-18600" y="-5480"/>
@@ -4288,7 +4288,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\debug_core.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\debug_core.v</file>
         </entry>
       </elementAttributes>
       <pos x="-19260" y="-5020"/>
@@ -4566,7 +4566,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\alu.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\alu.v</file>
         </entry>
       </elementAttributes>
       <pos x="-17880" y="-7440"/>
@@ -4882,7 +4882,7 @@
         </entry>
         <entry>
           <string>CodeFile</string>
-          <file>.\verilog\qspi_memory_interface.v</file>
+          <file>D:\Desktop\fpga\RemedyCpu\verilog\qspi_memory_interface.v</file>
         </entry>
       </elementAttributes>
       <pos x="-19700" y="-5740"/>
@@ -5466,24 +5466,10 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>execute-pulse</string>
+          <string>spi_busy_ram</string>
         </entry>
       </elementAttributes>
-      <pos x="-15640" y="-9220"/>
-    </visualElement>
-    <visualElement>
-      <elementName>Tunnel</elementName>
-      <elementAttributes>
-        <entry>
-          <string>rotation</string>
-          <rotation rotation="2"/>
-        </entry>
-        <entry>
-          <string>NetName</string>
-          <string>execute-pulse</string>
-        </entry>
-      </elementAttributes>
-      <pos x="-15640" y="-8760"/>
+      <pos x="-15640" y="-8920"/>
     </visualElement>
   </visualElements>
   <wires>
@@ -5602,10 +5588,6 @@
     <wire>
       <p1 x="-18960" y="-5380"/>
       <p2 x="-18600" y="-5380"/>
-    </wire>
-    <wire>
-      <p1 x="-15640" y="-9220"/>
-      <p2 x="-15580" y="-9220"/>
     </wire>
     <wire>
       <p1 x="-17680" y="-8200"/>
@@ -6074,10 +6056,6 @@
     <wire>
       <p1 x="-18100" y="-8760"/>
       <p2 x="-18020" y="-8760"/>
-    </wire>
-    <wire>
-      <p1 x="-15640" y="-8760"/>
-      <p2 x="-15580" y="-8760"/>
     </wire>
     <wire>
       <p1 x="-14980" y="-7740"/>
@@ -7345,6 +7323,10 @@
     </wire>
     <wire>
       <p1 x="-15920" y="-8920"/>
+      <p2 x="-15780" y="-8920"/>
+    </wire>
+    <wire>
+      <p1 x="-15640" y="-8920"/>
       <p2 x="-15580" y="-8920"/>
     </wire>
     <wire>

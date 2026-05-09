@@ -1919,7 +1919,7 @@
         </entry>
         <entry>
           <string>externalInputs</string>
-          <string>dOut:16,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n,execute_pulse</string>
+          <string>dOut:16,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n</string>
         </entry>
         <entry>
           <string>externalOutputs</string>
@@ -2015,7 +2015,7 @@
         </entry>
         <entry>
           <string>externalInputs</string>
-          <string>dOut:9,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n,execute_pulse</string>
+          <string>dOut:9,Addr:5,ioW,C,InterLock,timerConfigAddr:5,timerTargetAddr:5,timerResetAddr:5,timerReadAddr:5,timerSyncStartAddr:5,rst_n</string>
         </entry>
         <entry>
           <string>externalOutputs</string>
@@ -5175,24 +5175,10 @@
         </entry>
         <entry>
           <string>NetName</string>
-          <string>execute-pulse</string>
+          <string>spi_busy_ram</string>
         </entry>
       </elementAttributes>
-      <pos x="-16280" y="-9140"/>
-    </visualElement>
-    <visualElement>
-      <elementName>Tunnel</elementName>
-      <elementAttributes>
-        <entry>
-          <string>rotation</string>
-          <rotation rotation="2"/>
-        </entry>
-        <entry>
-          <string>NetName</string>
-          <string>execute-pulse</string>
-        </entry>
-      </elementAttributes>
-      <pos x="-16280" y="-8680"/>
+      <pos x="-16280" y="-8840"/>
     </visualElement>
   </visualElements>
   <wires>
@@ -6206,6 +6192,10 @@
     </wire>
     <wire>
       <p1 x="-16560" y="-8840"/>
+      <p2 x="-16420" y="-8840"/>
+    </wire>
+    <wire>
+      <p1 x="-16280" y="-8840"/>
       <p2 x="-16220" y="-8840"/>
     </wire>
     <wire>
@@ -6571,10 +6561,6 @@
     <wire>
       <p1 x="-19600" y="-5300"/>
       <p2 x="-19240" y="-5300"/>
-    </wire>
-    <wire>
-      <p1 x="-16280" y="-9140"/>
-      <p2 x="-16220" y="-9140"/>
     </wire>
     <wire>
       <p1 x="-18320" y="-8120"/>
@@ -7007,10 +6993,6 @@
     <wire>
       <p1 x="-18740" y="-8680"/>
       <p2 x="-18660" y="-8680"/>
-    </wire>
-    <wire>
-      <p1 x="-16280" y="-8680"/>
-      <p2 x="-16220" y="-8680"/>
     </wire>
     <wire>
       <p1 x="-21060" y="-6380"/>

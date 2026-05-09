@@ -1,6 +1,4 @@
-<!---
-This file is used to generate your project datasheet.
--->
+
 
 # Remedy CPU / TinyCPU Datasheet
 
@@ -8,8 +6,7 @@ This file is used to generate your project datasheet.
 
 Use the custom IDE/toolchain to assemble TinyCPU assembly, or the work-in-progress cpp-ish compiler, then upload the generated program image to the external flash. I am also working on a vscode extension to integrate these steps into a more user-friendly workflow. with code upload, flash programming, and serial debugging features hopefully. 
 
-[repo link here hopefully If I don't forget]
-
+[Here is the Repo link](https://github.com/leonidas213/Remedy-Compiler) : https://github.com/leonidas213/Remedy-Compiler
 ### Assembler
 ![image](assembler.png)
 
@@ -154,7 +151,6 @@ Both timers use the same 8-bit config layout:
 | `[4:1]` | prescaler | Prescaler select |
 | `[5]` | auto reload | When target matches, reset count to zero instead of staying at target |
 | `[6]` | IRQ enable | Timer asserts interrupt when target matches |
-| `[7]` | source select | `0` = system clock source, `1` = `execute_pulse` source |
 
 Prescaler encoding:
 
@@ -174,28 +170,20 @@ Prescaler encoding:
 | 11 | `/2048` |
 | 12-15 | reserved/currently behaves like `/1` |
 
-The RTL keeps one real clock domain. The source select only chooses the clock-enable source feeding the prescaler:
-
-```text
-source = 0: prescaler advances every system clock
-source = 1: prescaler advances only on execute_pulse
-```
-
-At 25 MHz, one system clock is 40 ns. If `execute_pulse` happens every 15 system clocks, one execute-source event is about 600 ns.
 
 Examples:
 
 | Source | Prescaler | Timer tick |
 |---|---:|---:|
 | System clock | `/2048` | 81.92 us |
-| Execute pulse every 15 clocks | `/2048` | 1.2288 ms |
+
 
 Max overflow times with `/2048`:
 
-| Timer | System clock source | Execute source, assuming 15 clocks per execute pulse |
-|---|---:|---:|
-| 16-bit timer | about 5.37 s | about 80.53 s |
-| 9-bit timer | about 41.94 ms | about 629.15 ms |
+| Timer | System clock source |
+|---|---:|
+| 16-bit timer | about 5.37 s |
+| 9-bit timer | about 41.94 ms |
 
 Notes:
 
@@ -373,8 +361,8 @@ putoutput r1
 Config value:
 
 ```text
-source=0, irq=1, reload=1, prescaler=11, enable=1
-config = (0<<7) | (1<<6) | (1<<5) | (11<<1) | 1 = 0x77
+irq=1, reload=1, prescaler=11, enable=1
+config = (1<<6) | (1<<5) | (11<<1) | 1 = 0x77
 ```
 
 ```asm
@@ -384,13 +372,13 @@ ldi r1, 1000
 out timer1Target, r1
 ```
 
-### Timer 2, execute-pulse source, `/2048`, IRQ enabled, auto reload enabled
+### Timer 2, `/2048`, IRQ enabled, auto reload enabled
 
 Config value:
 
 ```text
-source=1, irq=1, reload=1, prescaler=11, enable=1
-config = 0xF7
+irq=1, reload=1, prescaler=11, enable=1
+config = (1<<6) | (1<<5) | (11<<1) | 1 = 0xF7
 ```
 
 ```asm
@@ -405,7 +393,7 @@ out timer2Target, r1
 ```asm
 jump main
 nop
-interrupt_handler: ;0x0002
+interrupt_handler: ;at memory address 0x0002
     in r0, InterruptRegister
 
     ; timer1 pending?
